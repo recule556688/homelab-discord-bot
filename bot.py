@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
+import json
 
 # Load settings from .env
 load_dotenv()
@@ -23,6 +24,25 @@ tree = bot.tree
 dashboard_message = None
 dashboard_channel = None
 
+# File to store dashboard state
+DASHBOARD_STATE_FILE = "dashboard_state.json"
+
+def save_dashboard_state(channel_id, message_id):
+    """Save the dashboard state to a file"""
+    state = {
+        "channel_id": channel_id,
+        "message_id": message_id
+    }
+    with open(DASHBOARD_STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+def load_dashboard_state():
+    """Load the dashboard state from file"""
+    try:
+        with open(DASHBOARD_STATE_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
@@ -52,6 +72,24 @@ async def on_ready():
         guild = discord.Object(id=TEST_GUILD_ID)
         synced = await tree.sync(guild=guild)
         print(f"✅ Synced {len(synced)} commands to guild {TEST_GUILD_ID}")
+        
+        # Restore dashboard if it exists
+        state = load_dashboard_state()
+        if state:
+            try:
+                channel = await bot.fetch_channel(state["channel_id"])
+                message = await channel.fetch_message(state["message_id"])
+                global dashboard_message, dashboard_channel
+                dashboard_message = message
+                dashboard_channel = channel
+                if not update_dashboard.is_running():
+                    update_dashboard.start()
+                print("✅ Restored dashboard state")
+            except discord.NotFound:
+                print("❌ Could not restore dashboard - message or channel not found")
+                # Clean up invalid state
+                if os.path.exists(DASHBOARD_STATE_FILE):
+                    os.remove(DASHBOARD_STATE_FILE)
     except Exception as e:
         print(f"❌ Sync failed: {e}")
 
@@ -73,6 +111,9 @@ async def dashboard(interaction: discord.Interaction):
     # Post the first dashboard embed publicly
     embed = create_health_embed()
     dashboard_message = await dashboard_channel.send(embed=embed)
+    
+    # Save the dashboard state
+    save_dashboard_state(dashboard_channel.id, dashboard_message.id)
 
     # Start the background update loop if it isn't running already.
     if not update_dashboard.is_running():
@@ -96,21 +137,95 @@ async def update_dashboard():
     guild=discord.Object(id=TEST_GUILD_ID),
 )
 async def server_health(interaction: discord.Interaction):
+    # System uptime
     uptime_seconds = time.time() - psutil.boot_time()
     hours, remainder = divmod(uptime_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
+    # CPU information
     cpu_usage = psutil.cpu_percent(interval=1)
-    memory = psutil.virtual_memory()
+    cpu_count = psutil.cpu_count()
+    cpu_freq = psutil.cpu_freq()
+    cpu_temp = None
+    try:
+        if hasattr(psutil, "sensors_temperatures"):
+            temps = psutil.sensors_temperatures()
+            if "coretemp" in temps:
+                cpu_temp = max(temp.current for temp in temps["coretemp"])
+    except:
+        cpu_temp = "N/A"
 
-    message = (
-        f"**Server Health:**\n"
-        f"**Uptime:** {uptime_str}\n"
-        f"**CPU Usage:** {cpu_usage}%\n"
-        f"**RAM Usage:** {memory.percent}%\n"
+    # Memory information
+    memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+
+    # Disk information
+    disk_info = []
+    for partition in psutil.disk_partitions():
+        if partition.fstype:
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                disk_info.append({
+                    "device": partition.device,
+                    "mount": partition.mountpoint,
+                    "total": usage.total,
+                    "used": usage.used,
+                    "free": usage.free,
+                    "percent": usage.percent
+                })
+            except:
+                continue
+
+    # Network information
+    net_io = psutil.net_io_counters()
+    net_connections = len(psutil.net_connections())
+
+    # Build the embed
+    embed = discord.Embed(title="🖥️ Detailed Server Health", color=0x00FF00)
+    # System Information
+    embed.add_field(
+        name="System Information",
+        value=f"**Uptime:** {uptime_str}\n"
+              f"**CPU Cores:** {cpu_count}\n"
+              f"**CPU Frequency:** {cpu_freq.current:.2f}MHz\n"
+              f"**CPU Temperature:** {cpu_temp if cpu_temp else 'N/A'}°C",
+        inline=False
     )
-    await interaction.response.send_message(message, ephemeral=True)
+
+    # CPU & Memory
+    embed.add_field(
+        name="CPU & Memory",
+        value=f"**CPU Usage:** {cpu_usage}%\n"
+              f"**RAM Usage:** {memory.percent}% ({memory.used / (1024**3):.1f}GB / {memory.total / (1024**3):.1f}GB)\n"
+              f"**Swap Usage:** {swap.percent}% ({swap.used / (1024**3):.1f}GB / {swap.total / (1024**3):.1f}GB)",
+        inline=False
+    )
+
+    # Disk Information
+    disk_value = ""
+    for disk in disk_info:
+        disk_value += (
+            f"**{disk['mount']}**\n"
+            f"• Total: {disk['total'] / (1024**3):.1f}GB\n"
+            f"• Used: {disk['used'] / (1024**3):.1f}GB ({disk['percent']}%)\n"
+            f"• Free: {disk['free'] / (1024**3):.1f}GB\n"
+        )
+    embed.add_field(name="Disk Usage", value=disk_value, inline=False)
+
+    # Network Information
+    embed.add_field(
+        name="Network",
+        value=f"**Active Connections:** {net_connections}\n"
+              f"**Bytes Sent:** {net_io.bytes_sent / (1024**2):.1f}MB\n"
+              f"**Bytes Received:** {net_io.bytes_recv / (1024**2):.1f}MB",
+        inline=False
+    )
+
+    # Add timestamp
+    embed.set_footer(text=f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @tree.command(
@@ -183,6 +298,49 @@ async def setup_homelab(interaction: discord.Interaction):
             await guild.create_text_channel(ch, category=category)
 
     await interaction.followup.send("🎉 Server structure created successfully!")
+
+
+@tree.command(
+    name="sync",
+    description="Sync slash commands (Admin only)",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def sync(interaction: discord.Interaction):
+    """Manually sync slash commands"""
+    await interaction.response.defer(ephemeral=True)
+    try:
+        # Sync to test guild
+        guild = discord.Object(id=TEST_GUILD_ID)
+        synced = await tree.sync(guild=guild)
+        await interaction.followup.send(
+            f"✅ Successfully synced {len(synced)} commands to guild {TEST_GUILD_ID}",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ Failed to sync commands: {e}",
+            ephemeral=True
+        )
+
+
+@tree.command(
+    name="commands",
+    description="List all available commands",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+async def list_commands(interaction: discord.Interaction):
+    """List all available commands with their descriptions"""
+    commands_list = []
+    for cmd in tree.get_commands(guild=discord.Object(id=TEST_GUILD_ID)):
+        commands_list.append(f"`/{cmd.name}` - {cmd.description}")
+    
+    embed = discord.Embed(
+        title="🤖 Available Commands",
+        description="\n".join(commands_list),
+        color=0x00FF00
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 def start_bot():
