@@ -146,95 +146,116 @@ async def update_dashboard():
     guild=discord.Object(id=TEST_GUILD_ID),
 )
 async def server_health(interaction: discord.Interaction):
-    # System uptime
-    uptime_seconds = time.time() - psutil.boot_time()
-    hours, remainder = divmod(uptime_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-
-    # CPU information
-    cpu_usage = psutil.cpu_percent(interval=1)
-    cpu_count = psutil.cpu_count()
-    cpu_freq = psutil.cpu_freq()
-    cpu_temp = None
+    await interaction.response.defer(ephemeral=True)
+    
     try:
-        if hasattr(psutil, "sensors_temperatures"):
-            temps = psutil.sensors_temperatures()
-            if "coretemp" in temps:
-                cpu_temp = max(temp.current for temp in temps["coretemp"])
-    except:
-        cpu_temp = "N/A"
+        # System uptime
+        uptime_seconds = time.time() - psutil.boot_time()
+        hours, remainder = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
-    # Memory information
-    memory = psutil.virtual_memory()
-    swap = psutil.swap_memory()
+        # CPU information
+        cpu_usage = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        cpu_temp = None
+        try:
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures()
+                if "coretemp" in temps:
+                    cpu_temp = max(temp.current for temp in temps["coretemp"])
+        except:
+            cpu_temp = "N/A"
 
-    # Disk information
-    disk_info = []
-    for partition in psutil.disk_partitions():
-        if partition.fstype:
+        # Memory information
+        memory = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+
+        # Network information - handle permissions gracefully
+        try:
+            net_io = psutil.net_io_counters()
+            net_bytes_sent = net_io.bytes_sent
+            net_bytes_recv = net_io.bytes_recv
             try:
-                usage = psutil.disk_usage(partition.mountpoint)
-                disk_info.append({
-                    "device": partition.device,
-                    "mount": partition.mountpoint,
-                    "total": usage.total,
-                    "used": usage.used,
-                    "free": usage.free,
-                    "percent": usage.percent
-                })
-            except:
-                continue
+                net_connections = len(psutil.net_connections())
+            except (psutil.AccessDenied, PermissionError):
+                net_connections = "N/A (Permission denied)"
+        except Exception:
+            net_bytes_sent = 0
+            net_bytes_recv = 0
+            net_connections = "N/A"
 
-    # Network information
-    net_io = psutil.net_io_counters()
-    net_connections = len(psutil.net_connections())
-
-    # Build the embed
-    embed = discord.Embed(title="🖥️ Detailed Server Health", color=0x00FF00)
-    # System Information
-    embed.add_field(
-        name="System Information",
-        value=f"**Uptime:** {uptime_str}\n"
-              f"**CPU Cores:** {cpu_count}\n"
-              f"**CPU Frequency:** {cpu_freq.current:.2f}MHz\n"
-              f"**CPU Temperature:** {cpu_temp if cpu_temp else 'N/A'}°C",
-        inline=False
-    )
-
-    # CPU & Memory
-    embed.add_field(
-        name="CPU & Memory",
-        value=f"**CPU Usage:** {cpu_usage}%\n"
-              f"**RAM Usage:** {memory.percent}% ({memory.used / (1024**3):.1f}GB / {memory.total / (1024**3):.1f}GB)\n"
-              f"**Swap Usage:** {swap.percent}% ({swap.used / (1024**3):.1f}GB / {swap.total / (1024**3):.1f}GB)",
-        inline=False
-    )
-
-    # Disk Information
-    disk_value = ""
-    for disk in disk_info:
-        disk_value += (
-            f"**{disk['mount']}**\n"
-            f"• Total: {disk['total'] / (1024**3):.1f}GB\n"
-            f"• Used: {disk['used'] / (1024**3):.1f}GB ({disk['percent']}%)\n"
-            f"• Free: {disk['free'] / (1024**3):.1f}GB\n"
+        # Build the embed with a modern layout
+        embed = discord.Embed(
+            title="",
+            description="",
+            color=0x00b8ff
         )
-    embed.add_field(name="Disk Usage", value=disk_value, inline=False)
 
-    # Network Information
-    embed.add_field(
-        name="Network",
-        value=f"**Active Connections:** {net_connections}\n"
-              f"**Bytes Sent:** {net_io.bytes_sent / (1024**2):.1f}MB\n"
-              f"**Bytes Received:** {net_io.bytes_recv / (1024**2):.1f}MB",
-        inline=False
-    )
+        # Modern title with emoji
+        embed.add_field(
+            name="\n💻 SYSTEM HEALTH DASHBOARD 📊",
+            value="━━━━━━━━━━━━━━━━━━━━━━━━",
+            inline=False
+        )
 
-    # Add timestamp
-    embed.set_footer(text=f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        # System Stats
+        system_stats = (
+            f"```ansi\n"
+            f"\u001b[1;36mSYSTEM OVERVIEW\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ Uptime: \u001b[1;33m{uptime_str}\u001b[0m\n"
+            f"│ CPU Cores: \u001b[1;33m{cpu_count}\u001b[0m\n"
+            f"│ CPU Freq: \u001b[1;33m{cpu_freq.current:.0f}MHz\u001b[0m\n"
+            f"│ Temperature: \u001b[1;33m{cpu_temp if cpu_temp else 'N/A'}°C\u001b[0m\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=system_stats, inline=False)
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+        # Resource Usage
+        resource_stats = (
+            f"```ansi\n"
+            f"\u001b[1;35mRESOURCE USAGE\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ CPU: \u001b[1;{33 if cpu_usage < 80 else 31}m{cpu_usage}%\u001b[0m\n"
+            f"│ RAM: \u001b[1;{33 if memory.percent < 80 else 31}m{memory.percent}%\u001b[0m ({memory.used / (1024**3):.1f}GB / {memory.total / (1024**3):.1f}GB)\n"
+            f"│ Swap: \u001b[1;{33 if swap.percent < 80 else 31}m{swap.percent}%\u001b[0m ({swap.used / (1024**3):.1f}GB / {swap.total / (1024**3):.1f}GB)\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=resource_stats, inline=True)
+
+        # Network Stats
+        network_stats = (
+            f"```ansi\n"
+            f"\u001b[1;35mNETWORK STATUS\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ Connections: \u001b[1;33m{net_connections}\u001b[0m\n"
+            f"│ Sent: \u001b[1;36m{net_bytes_sent / (1024**2):.1f}MB\u001b[0m\n"
+            f"│ Received: \u001b[1;36m{net_bytes_recv / (1024**2):.1f}MB\u001b[0m\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=network_stats, inline=True)
+
+        # Add timestamp
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        embed.set_footer(
+            text=f"📊 Stats as of {current_time} • Use /serverhealth to refresh",
+            icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Error",
+            description=f"Failed to fetch server health:\n```ansi\n\u001b[1;31m{str(e)}\u001b[0m```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 @tree.command(
@@ -369,76 +390,134 @@ async def media_stats(interaction: discord.Interaction):
         # Get library sections
         movies = plex.library.section("Movies")
         shows = plex.library.section("TV Shows")
-        music = plex.library.section("Music") if "Music" in [s.title for s in plex.library.sections()] else None
 
         # Calculate recently added items (last 7 days)
         recent_date = datetime.now() - timedelta(days=7)
         
-        # Get recently added movies
+        # Get recently added movies and shows
         recent_movies = movies.search(sort="addedAt:desc", maxresults=10)
         recent_movies = [m for m in recent_movies if m.addedAt >= recent_date]
         
-        # Get recently added shows
         recent_shows = shows.search(sort="addedAt:desc", maxresults=10)
         recent_shows = [s for s in recent_shows if s.addedAt >= recent_date]
 
-        # Build the embed
-        embed = discord.Embed(title="📊 Media Library Statistics", color=0x00FF00)
-        
-        # Movies Statistics
-        embed.add_field(
-            name="🎬 Movies",
-            value=f"**Total Movies:** {movies.totalSize}\n"
-                  f"**Recently Added:** {len(recent_movies)}\n"
-                  f"**Total Duration:** {sum(m.duration for m in movies.all()) / 3600000:.1f} hours",
-            inline=True
+        # Calculate total duration for movies
+        total_movie_minutes = sum(m.duration for m in movies.all()) / 60000  # Convert ms to minutes
+        movie_days = int(total_movie_minutes // 1440)  # minutes in a day
+        movie_hours = int((total_movie_minutes % 1440) // 60)
+        movie_minutes = int(total_movie_minutes % 60)
+
+        # Calculate total duration for TV shows
+        total_show_minutes = 0
+        total_episodes = 0
+        for show in shows.all():
+            for episode in show.episodes():
+                if hasattr(episode, 'duration'):
+                    total_show_minutes += episode.duration / 60000  # Convert ms to minutes
+                    total_episodes += 1
+
+        show_days = int(total_show_minutes // 1440)
+        show_hours = int((total_show_minutes % 1440) // 60)
+        show_minutes = int(total_show_minutes % 60)
+
+        # Calculate combined total duration
+        total_minutes = total_movie_minutes + total_show_minutes
+        total_days = int(total_minutes // 1440)
+        total_hours = int((total_minutes % 1440) // 60)
+        total_minutes = int(total_minutes % 60)
+
+        # Build the embed with a modern layout
+        embed = discord.Embed(
+            title="",  # We'll use a field for the title to make it more stylish
+            description="",
+            color=0x00b8ff  # Plex blue color
         )
 
-        # TV Shows Statistics
-        total_episodes = sum(len(show.episodes()) for show in shows.all())
+        # Modern title with emoji
         embed.add_field(
-            name="📺 TV Shows",
-            value=f"**Total Shows:** {shows.totalSize}\n"
-                  f"**Total Episodes:** {total_episodes}\n"
-                  f"**Recently Added:** {len(recent_shows)}",
-            inline=True
+            name="\n🎬 PLEX MEDIA STATISTICS 📊",
+            value="━━━━━━━━━━━━━━━━━━━━━━━━",
+            inline=False
         )
 
-        # Music Statistics (if available)
-        if music:
-            embed.add_field(
-                name="🎵 Music",
-                value=f"**Total Artists:** {music.totalSize}\n"
-                      f"**Total Albums:** {sum(len(artist.albums()) for artist in music.all())}\n"
-                      f"**Total Tracks:** {sum(len(album.tracks()) for album in music.all())}",
-                inline=True
-            )
+        # Total Collection Stats with modern formatting
+        total_stats = (
+            f"```ansi\n"
+            f"\u001b[1;36m📼 TOTAL COLLECTION\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ Duration: \u001b[1;33m{total_days}d {total_hours}h {total_minutes}m\u001b[0m │\n"
+            f"│ Content: \u001b[1;33m{(total_minutes + total_hours * 60 + total_days * 1440):,}min\u001b[0m │\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=total_stats, inline=False)
 
-        # Recently Added Movies
+        # Movies Statistics with modern formatting
+        movies_stats = (
+            f"```ansi\n"
+            f"\u001b[1;35m🎥 MOVIES\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ Total: \u001b[1;33m{movies.totalSize:,} movies\u001b[0m\n"
+            f"│ Duration: \u001b[1;36m{movie_days}d {movie_hours}h {movie_minutes}m\u001b[0m\n"
+            f"│ Average: \u001b[1;32m{(total_movie_minutes / movies.totalSize):.1f}min\u001b[0m\n"
+            f"│ New: \u001b[1;31m+{len(recent_movies)} this week\u001b[0m\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=movies_stats, inline=True)
+
+        # TV Shows Statistics with modern formatting
+        shows_stats = (
+            f"```ansi\n"
+            f"\u001b[1;35m📺 TV SHOWS\u001b[0m\n"
+            f"┌──────────────────────────┐\n"
+            f"│ Shows: \u001b[1;33m{shows.totalSize:,} series\u001b[0m\n"
+            f"│ Episodes: \u001b[1;33m{total_episodes:,} total\u001b[0m\n"
+            f"│ Duration: \u001b[1;36m{show_days}d {show_hours}h {show_minutes}m\u001b[0m\n"
+            f"│ Average: \u001b[1;32m{(total_show_minutes / total_episodes):.1f}min\u001b[0m\n"
+            f"│ New: \u001b[1;31m+{len(recent_shows)} this week\u001b[0m\n"
+            f"└──────────────────────────┘\n"
+            f"```"
+        )
+        embed.add_field(name="", value=shows_stats, inline=True)
+
+        # Divider
+        embed.add_field(name="", value="━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+
+        # Recently Added Content with modern formatting
         if recent_movies:
-            recent_movies_str = "\n".join([f"• {m.title} ({m.year})" for m in recent_movies[:5]])
-            embed.add_field(
-                name="🎥 Recently Added Movies",
-                value=recent_movies_str,
-                inline=False
-            )
+            recent_content = "```ansi\n\u001b[1;35mRECENT ADDITIONS\u001b[0m\n"
+            recent_content += "\u001b[1;33mMovies:\u001b[0m\n"
+            for m in recent_movies[:3]:
+                recent_content += f"• \u001b[1;36m{m.title}\u001b[0m ({m.year}) - \u001b[1;32m{m.duration // 60000}min\u001b[0m\n"
+            
+            if recent_shows:
+                recent_content += "\n\u001b[1;33mTV Shows:\u001b[0m\n"
+                for s in recent_shows[:3]:
+                    recent_content += f"• \u001b[1;36m{s.title}\u001b[0m - \u001b[1;32m{len(s.episodes())} episodes\u001b[0m\n"
+            
+            recent_content += "```"
+            embed.add_field(name="", value=recent_content, inline=False)
 
-        # Recently Added Shows
-        if recent_shows:
-            recent_shows_str = "\n".join([f"• {s.title}" for s in recent_shows[:5]])
-            embed.add_field(
-                name="📺 Recently Added Shows",
-                value=recent_shows_str,
-                inline=False
-            )
+        # Modern footer with timestamp
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        embed.set_footer(
+            text=f"📊 Stats as of {current_time} • Use /media_stats to refresh",
+            icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
+        )
 
-        # Add timestamp
-        embed.set_footer(text=f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        # Add Plex logo
+        embed.set_thumbnail(url="https://cdn.iconscout.com/icon/free/png-256/plex-3521495-2944935.png")
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Error fetching media statistics: {str(e)}", ephemeral=True)
+        error_embed = discord.Embed(
+            title="❌ Error",
+            description=f"Failed to fetch media statistics:\n```ansi\n\u001b[1;31m{str(e)}\u001b[0m```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 def start_bot():
