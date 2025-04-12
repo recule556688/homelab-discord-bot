@@ -26,7 +26,7 @@ dashboard_message = None
 dashboard_channel = None
 
 # File to store dashboard state
-DASHBOARD_STATE_FILE = "dashboard_state.json"
+DASHBOARD_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard_state.json")
 
 def get_plex_connection():
     """Create a connection to Plex server"""
@@ -38,20 +38,27 @@ def get_plex_connection():
 
 def save_dashboard_state(channel_id, message_id):
     """Save the dashboard state to a file"""
-    state = {
-        "channel_id": channel_id,
-        "message_id": message_id
-    }
-    with open(DASHBOARD_STATE_FILE, "w") as f:
-        json.dump(state, f)
+    try:
+        state = {
+            "channel_id": channel_id,
+            "message_id": message_id
+        }
+        # Ensure the data directory exists
+        os.makedirs(os.path.dirname(DASHBOARD_STATE_FILE), exist_ok=True)
+        with open(DASHBOARD_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"Error saving dashboard state: {e}")
 
 def load_dashboard_state():
     """Load the dashboard state from file"""
     try:
-        with open(DASHBOARD_STATE_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
+        if os.path.exists(DASHBOARD_STATE_FILE):
+            with open(DASHBOARD_STATE_FILE, "r") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading dashboard state: {e}")
+    return None
 
 def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
@@ -175,14 +182,6 @@ async def dashboard(interaction: discord.Interaction):
     try:
         global dashboard_message, dashboard_channel
         dashboard_channel = interaction.channel
-
-        # Create data directory if it doesn't exist
-        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-        os.makedirs(data_dir, exist_ok=True)
-        
-        # Update the dashboard state file path
-        global DASHBOARD_STATE_FILE
-        DASHBOARD_STATE_FILE = os.path.join(data_dir, "dashboard_state.json")
 
         # Send an ephemeral message so the user knows the dashboard is starting
         await interaction.followup.send(
