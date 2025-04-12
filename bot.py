@@ -63,13 +63,74 @@ def create_health_embed():
     # Gather CPU and RAM usage using psutil
     cpu_usage = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
 
-    # Build the embed
-    embed = discord.Embed(title="🖥️ Server Health Dashboard", color=0x00FF00)
-    embed.add_field(name="Uptime", value=uptime_str, inline=False)
-    embed.add_field(name="CPU Usage", value=f"{cpu_usage}%", inline=True)
-    embed.add_field(name="RAM Usage", value=f"{memory.percent}%", inline=True)
-    embed.set_footer(text="Updated every 30 seconds")
+    # Get network info with error handling
+    try:
+        net_io = psutil.net_io_counters()
+        net_bytes_sent = net_io.bytes_sent / (1024**2)  # Convert to MB
+        net_bytes_recv = net_io.bytes_recv / (1024**2)  # Convert to MB
+    except:
+        net_bytes_sent = 0
+        net_bytes_recv = 0
+
+    # Build the embed with modern styling
+    embed = discord.Embed(
+        title="",
+        description="",
+        color=0x00b8ff  # Plex blue color
+    )
+
+    # Title
+    embed.add_field(
+        name="\n💻 LIVE SYSTEM DASHBOARD 📊",
+        value="━━━━━━━━━━━━━━━━━━━━━━━━",
+        inline=False
+    )
+
+    # System Overview
+    system_stats = (
+        f"```ansi\n"
+        f"\u001b[1;36mSYSTEM OVERVIEW\u001b[0m\n"
+        f"┌──────────────────────────┐\n"
+        f"│ Uptime: \u001b[1;33m{uptime_str}\u001b[0m\n"
+        f"└──────────────────────────┘\n"
+        f"```"
+    )
+    embed.add_field(name="", value=system_stats, inline=False)
+
+    # Resource Usage
+    resource_stats = (
+        f"```ansi\n"
+        f"\u001b[1;35mRESOURCE USAGE\u001b[0m\n"
+        f"┌──────────────────────────┐\n"
+        f"│ CPU: \u001b[1;{33 if cpu_usage < 80 else 31}m{cpu_usage}%\u001b[0m\n"
+        f"│ RAM: \u001b[1;{33 if memory.percent < 80 else 31}m{memory.percent}%\u001b[0m\n"
+        f"│ Used: \u001b[1;36m{memory.used / (1024**3):.1f}GB\u001b[0m / \u001b[1;33m{memory.total / (1024**3):.1f}GB\u001b[0m\n"
+        f"└──────────────────────────┘\n"
+        f"```"
+    )
+    embed.add_field(name="", value=resource_stats, inline=True)
+
+    # Network Status
+    network_stats = (
+        f"```ansi\n"
+        f"\u001b[1;35mNETWORK STATUS\u001b[0m\n"
+        f"┌──────────────────────────┐\n"
+        f"│ Upload: \u001b[1;32m{net_bytes_sent:.1f} MB\u001b[0m\n"
+        f"│ Download: \u001b[1;32m{net_bytes_recv:.1f} MB\u001b[0m\n"
+        f"└──────────────────────────┘\n"
+        f"```"
+    )
+    embed.add_field(name="", value=network_stats, inline=True)
+
+    # Add timestamp and refresh info
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    embed.set_footer(
+        text=f"🔄 Auto-updates every 30s • Last update: {current_time}",
+        icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
+    )
+
     return embed
 
 
@@ -109,24 +170,44 @@ async def on_ready():
     guild=discord.Object(id=TEST_GUILD_ID),
 )
 async def dashboard(interaction: discord.Interaction):
-    global dashboard_message, dashboard_channel
-    dashboard_channel = interaction.channel
-
-    # Send an ephemeral message so the user knows the dashboard is starting.
-    await interaction.response.send_message(
-        "Starting dashboard... (This message is ephemeral)", ephemeral=True
-    )
-
-    # Post the first dashboard embed publicly
-    embed = create_health_embed()
-    dashboard_message = await dashboard_channel.send(embed=embed)
+    await interaction.response.defer()
     
-    # Save the dashboard state
-    save_dashboard_state(dashboard_channel.id, dashboard_message.id)
+    try:
+        global dashboard_message, dashboard_channel
+        dashboard_channel = interaction.channel
 
-    # Start the background update loop if it isn't running already.
-    if not update_dashboard.is_running():
-        update_dashboard.start()
+        # Create data directory if it doesn't exist
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Update the dashboard state file path
+        global DASHBOARD_STATE_FILE
+        DASHBOARD_STATE_FILE = os.path.join(data_dir, "dashboard_state.json")
+
+        # Send an ephemeral message so the user knows the dashboard is starting
+        await interaction.followup.send(
+            "🚀 Starting system dashboard... (This message will disappear)", 
+            ephemeral=True
+        )
+
+        # Post the first dashboard embed publicly
+        embed = create_health_embed()
+        dashboard_message = await dashboard_channel.send(embed=embed)
+
+        # Save the dashboard state
+        save_dashboard_state(dashboard_channel.id, dashboard_message.id)
+
+        # Start the background update loop if it isn't running already
+        if not update_dashboard.is_running():
+            update_dashboard.start()
+
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Error",
+            description=f"Failed to start dashboard:\n```ansi\n\u001b[1;31m{str(e)}\u001b[0m```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 @tasks.loop(seconds=30)
@@ -138,6 +219,15 @@ async def update_dashboard():
             await dashboard_message.edit(embed=new_embed)
         except Exception as e:
             print(f"Error updating dashboard: {e}")
+            # If we lost the message reference, try to restore it
+            try:
+                state = load_dashboard_state()
+                if state:
+                    channel = await bot.fetch_channel(state["channel_id"])
+                    dashboard_message = await channel.fetch_message(state["message_id"])
+                    await dashboard_message.edit(embed=new_embed)
+            except Exception as restore_error:
+                print(f"Failed to restore dashboard: {restore_error}")
 
 
 @tree.command(
@@ -364,7 +454,6 @@ async def list_commands(interaction: discord.Interaction):
     commands_list = []
     for cmd in tree.get_commands(guild=discord.Object(id=TEST_GUILD_ID)):
         commands_list.append(f"`/{cmd.name}` - {cmd.description}")
-    
     embed = discord.Embed(
         title="🤖 Available Commands",
         description="\n".join(commands_list),
