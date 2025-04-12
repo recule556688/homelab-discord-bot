@@ -6,14 +6,15 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import json
+from plexapi.server import PlexServer
+from datetime import datetime, timedelta
 
 # Load settings from .env
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-
-# Set your test guild ID here (as an integer). This is for instant slash command sync while testing.
-# You can also define it in your .env file and fetch it via os.getenv("TEST_GUILD_ID")
 TEST_GUILD_ID = int(os.getenv("TEST_GUILD_ID"))
+PLEX_URL = os.getenv("PLEX_URL")
+PLEX_TOKEN = os.getenv("PLEX_TOKEN")
 
 # Set up the bot with all intents
 intents = discord.Intents.all()
@@ -26,6 +27,14 @@ dashboard_channel = None
 
 # File to store dashboard state
 DASHBOARD_STATE_FILE = "dashboard_state.json"
+
+def get_plex_connection():
+    """Create a connection to Plex server"""
+    try:
+        return PlexServer(PLEX_URL, PLEX_TOKEN)
+    except Exception as e:
+        print(f"Error connecting to Plex: {e}")
+        return None
 
 def save_dashboard_state(channel_id, message_id):
     """Save the dashboard state to a file"""
@@ -341,6 +350,95 @@ async def list_commands(interaction: discord.Interaction):
         color=0x00FF00
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@tree.command(
+    name="media_stats",
+    description="Show statistics from your media libraries",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+async def media_stats(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    plex = get_plex_connection()
+    if not plex:
+        await interaction.followup.send("❌ Could not connect to Plex server. Please check your configuration.", ephemeral=True)
+        return
+
+    try:
+        # Get library sections
+        movies = plex.library.section("Movies")
+        shows = plex.library.section("TV Shows")
+        music = plex.library.section("Music") if "Music" in [s.title for s in plex.library.sections()] else None
+
+        # Calculate recently added items (last 7 days)
+        recent_date = datetime.now() - timedelta(days=7)
+        
+        # Get recently added movies
+        recent_movies = movies.search(sort="addedAt:desc", maxresults=10)
+        recent_movies = [m for m in recent_movies if m.addedAt >= recent_date]
+        
+        # Get recently added shows
+        recent_shows = shows.search(sort="addedAt:desc", maxresults=10)
+        recent_shows = [s for s in recent_shows if s.addedAt >= recent_date]
+
+        # Build the embed
+        embed = discord.Embed(title="📊 Media Library Statistics", color=0x00FF00)
+        
+        # Movies Statistics
+        embed.add_field(
+            name="🎬 Movies",
+            value=f"**Total Movies:** {movies.totalSize}\n"
+                  f"**Recently Added:** {len(recent_movies)}\n"
+                  f"**Total Duration:** {sum(m.duration for m in movies.all()) / 3600000:.1f} hours",
+            inline=True
+        )
+
+        # TV Shows Statistics
+        total_episodes = sum(len(show.episodes()) for show in shows.all())
+        embed.add_field(
+            name="📺 TV Shows",
+            value=f"**Total Shows:** {shows.totalSize}\n"
+                  f"**Total Episodes:** {total_episodes}\n"
+                  f"**Recently Added:** {len(recent_shows)}",
+            inline=True
+        )
+
+        # Music Statistics (if available)
+        if music:
+            embed.add_field(
+                name="🎵 Music",
+                value=f"**Total Artists:** {music.totalSize}\n"
+                      f"**Total Albums:** {sum(len(artist.albums()) for artist in music.all())}\n"
+                      f"**Total Tracks:** {sum(len(album.tracks()) for album in music.all())}",
+                inline=True
+            )
+
+        # Recently Added Movies
+        if recent_movies:
+            recent_movies_str = "\n".join([f"• {m.title} ({m.year})" for m in recent_movies[:5]])
+            embed.add_field(
+                name="🎥 Recently Added Movies",
+                value=recent_movies_str,
+                inline=False
+            )
+
+        # Recently Added Shows
+        if recent_shows:
+            recent_shows_str = "\n".join([f"• {s.title}" for s in recent_shows[:5]])
+            embed.add_field(
+                name="📺 Recently Added Shows",
+                value=recent_shows_str,
+                inline=False
+            )
+
+        # Add timestamp
+        embed.set_footer(text=f"Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error fetching media statistics: {str(e)}", ephemeral=True)
 
 
 def start_bot():
