@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import json
 from plexapi.server import PlexServer
 from datetime import datetime, timedelta
+from discord.ui import Button, View
+import asyncio
 
 # Load settings from .env
 load_dotenv()
@@ -145,8 +147,10 @@ def create_health_embed():
 async def on_ready():
     print(f"🤖 Logged in as {bot.user}")
     try:
-        # Sync commands to the test guild for instant availability.
+        # Get the test guild
         guild = discord.Object(id=TEST_GUILD_ID)
+        
+        # Sync the commands
         synced = await tree.sync(guild=guild)
         print(f"✅ Synced {len(synced)} commands to guild {TEST_GUILD_ID}")
         
@@ -170,6 +174,63 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Sync failed: {e}")
 
+async def setup_commands():
+    """Set up all slash commands"""
+    guild = discord.Object(id=TEST_GUILD_ID)
+    
+    # Commands list
+    commands = [
+        app_commands.Command(
+            name="setup_homelab",
+            description="Set up the homelab server layout with roles and channels.",
+            callback=setup_homelab
+        ),
+        app_commands.Command(
+            name="dashboard",
+            description="Start a persistent server health dashboard.",
+            callback=dashboard
+        ),
+        app_commands.Command(
+            name="serverhealth",
+            description="Check current server health stats.",
+            callback=server_health
+        ),
+        app_commands.Command(
+            name="ping",
+            description="Check the bot's latency.",
+            callback=ping
+        ),
+        app_commands.Command(
+            name="sync",
+            description="Sync slash commands (Admin only)",
+            callback=sync
+        ),
+        app_commands.Command(
+            name="commands",
+            description="List all available commands",
+            callback=list_commands
+        ),
+        app_commands.Command(
+            name="media_stats",
+            description="Show statistics from your media libraries",
+            callback=media_stats
+        ),
+        app_commands.Command(
+            name="send_intro_embed",
+            description="Send the onboarding embed to the start-here channel.",
+            callback=send_intro_embed
+        ),
+        app_commands.Command(
+            name="send_invite_embed",
+            description="Send the get-invite embed to the channel.",
+            callback=send_invite_embed
+        )
+    ]
+    
+    # Add each command to the tree
+    for cmd in commands:
+        tree.add_command(cmd, guild=guild)
+
 
 @tree.command(
     name="dashboard",
@@ -181,6 +242,24 @@ async def dashboard(interaction: discord.Interaction):
     
     try:
         global dashboard_message, dashboard_channel
+
+        # Delete existing dashboard if it exists
+        try:
+            state = load_dashboard_state()
+            if state:
+                try:
+                    old_channel = await bot.fetch_channel(state["channel_id"])
+                    old_message = await old_channel.fetch_message(state["message_id"])
+                    await old_message.delete()
+                except:
+                    pass  # Ignore if message doesn't exist or can't be deleted
+                
+                # Clean up the state file
+                if os.path.exists(DASHBOARD_STATE_FILE):
+                    os.remove(DASHBOARD_STATE_FILE)
+        except:
+            pass  # Ignore any errors during cleanup
+
         dashboard_channel = interaction.channel
 
         # Send an ephemeral message so the user knows the dashboard is starting
@@ -369,18 +448,26 @@ async def setup_homelab(interaction: discord.Interaction):
     await interaction.response.defer()
     guild = interaction.guild
 
+    # Define roles with their permissions
     roles = {
         "🛡️ Admin": discord.Permissions(administrator=True),
         "👀 Observer": discord.Permissions(view_channel=True),
         "🔧 Maintainer": discord.Permissions(manage_messages=True),
         "🤖 Bot": discord.Permissions(send_messages=True),
         "🎮 Gamer": discord.Permissions(read_messages=True),
+        "🎟️ Approved": discord.Permissions(read_messages=True),  # Role for approved users
+        "⏳ Pending": discord.Permissions(read_messages=True),    # Role for pending users
+        "❌ Denied": discord.Permissions(read_messages=True),     # New role for denied users
     }
 
-    # Create roles
+    # Create or update roles
     for name, perms in roles.items():
-        await guild.create_role(name=name, permissions=perms)
+        existing_role = discord.utils.get(guild.roles, name=name)
+        if not existing_role:
+            await guild.create_role(name=name, permissions=perms)
+            print(f"Created role: {name}")
 
+    # Define categories and their channels
     categories = {
         "📊 System & Status": [
             "📈｜system-health",
@@ -408,15 +495,57 @@ async def setup_homelab(interaction: discord.Interaction):
         ],
         "🤖 Bot Commands": ["🤖｜commands", "📜｜logs", "🔒｜admin-cmds"],
         "🚨 Alerts": ["🔥｜alerts", "👀｜watchdog"],
+        "👋 Onboarding": [  # New category for onboarding
+            "📖｜start-here",
+            "📬｜get-invite",
+            "🎫｜access-requests",
+        ],
     }
 
-    # Create each category and its channels.
+    # Create or update categories and channels
     for category_name, channels in categories.items():
-        category = await guild.create_category(category_name)
-        for ch in channels:
-            await guild.create_text_channel(ch, category=category)
+        # Check if category exists
+        existing_category = discord.utils.get(guild.categories, name=category_name)
+        if not existing_category:
+            category = await guild.create_category(category_name)
+            print(f"Created category: {category_name}")
+        else:
+            category = existing_category
+            print(f"Using existing category: {category_name}")
 
-    await interaction.followup.send("🎉 Server structure created successfully!")
+        # Create or update channels in the category
+        for channel_name in channels:
+            existing_channel = discord.utils.get(guild.channels, name=channel_name)
+            if not existing_channel:
+                # Set up channel permissions based on category
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                }
+                
+                # Special permissions for onboarding channels
+                if category_name == "👋 Onboarding":
+                    if channel_name == "📖｜start-here":
+                        # Everyone can read start-here
+                        overwrites[guild.default_role] = discord.PermissionOverwrite(read_messages=True)
+                    elif channel_name == "📬｜get-invite":
+                        # Only approved users can see get-invite
+                        approved_role = discord.utils.get(guild.roles, name="🎟️ Approved")
+                        if approved_role:
+                            overwrites[approved_role] = discord.PermissionOverwrite(read_messages=True)
+                    elif channel_name == "🎫｜access-requests":
+                        # Only mods and admins can see access requests
+                        admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
+                        maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
+                        if admin_role:
+                            overwrites[admin_role] = discord.PermissionOverwrite(read_messages=True)
+                        if maintainer_role:
+                            overwrites[maintainer_role] = discord.PermissionOverwrite(read_messages=True)
+
+                await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
+                print(f"Created channel: {channel_name}")
+
+    await interaction.followup.send("🎉 Server structure created/updated successfully!")
 
 
 @tree.command(
@@ -607,6 +736,343 @@ async def media_stats(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=error_embed, ephemeral=True)
 
+
+class OnboardingView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(Button(label="🎟 Request Access", style=discord.ButtonStyle.primary, custom_id="request_access"))
+
+class AccessRequestView(View):
+    def __init__(self, user_id: int):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+
+    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success, custom_id="approve_request")
+    async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            # Get the thread
+            thread = interaction.channel
+            
+            # Acknowledge the interaction first
+            await interaction.response.defer()
+            
+            try:
+                user = await interaction.guild.fetch_member(self.user_id)
+                if not user:
+                    await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                    return
+                    
+                # Remove denied role if they had it
+                denied_role = discord.utils.get(interaction.guild.roles, name="❌ Denied")
+                if denied_role and denied_role in user.roles:
+                    await user.remove_roles(denied_role)
+                
+                # Add approved role
+                approved_role = discord.utils.get(interaction.guild.roles, name="🎟️ Approved")
+                if approved_role:
+                    await user.add_roles(approved_role)
+                    
+                    # Send approval message in thread
+                    embed = discord.Embed(
+                        title="✅ Request Approved",
+                        description=f"{user.mention} has been approved for access!\n\nThey can now access the invite channel.",
+                        color=0x00ff00
+                    )
+                    await interaction.followup.send(embed=embed)
+
+                    # Send a single DM to the user
+                    try:
+                        dm_embed = discord.Embed(
+                            title="🎉 Access Approved!",
+                            description="Your access request has been approved! You can now access the invite channel.",
+                            color=0x00ff00
+                        )
+                        await user.send(embed=dm_embed)
+                    except:
+                        # If DM fails, add a note to the thread
+                        await thread.send("Note: Could not send DM to user (they may have DMs disabled)")
+
+                    # Archive the thread after a delay
+                    await asyncio.sleep(5)
+                    await thread.edit(archived=True, locked=True)
+                else:
+                    await interaction.followup.send("❌ Error: Could not find the Approved role.", ephemeral=True)
+            except discord.NotFound:
+                await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error while approving: {str(e)}", ephemeral=True)
+
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="deny_request")
+    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            # Get the thread
+            thread = interaction.channel
+            
+            # Acknowledge the interaction first
+            await interaction.response.defer()
+            
+            try:
+                user = await interaction.guild.fetch_member(self.user_id)
+                if not user:
+                    await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                    return
+
+                # Remove approved role if they had it
+                approved_role = discord.utils.get(interaction.guild.roles, name="🎟️ Approved")
+                if approved_role and approved_role in user.roles:
+                    await user.remove_roles(approved_role)
+                
+                # Add denied role
+                denied_role = discord.utils.get(interaction.guild.roles, name="❌ Denied")
+                if denied_role:
+                    await user.add_roles(denied_role)
+
+                # Send denial message in thread
+                embed = discord.Embed(
+                    title="❌ Request Denied",
+                    description=f"{user.mention}'s access request has been denied.",
+                    color=0xff0000
+                )
+                await interaction.followup.send(embed=embed)
+
+                # Send a single DM to the user
+                try:
+                    dm_embed = discord.Embed(
+                        title="❌ Access Denied",
+                        description="Your access request has been denied. Please contact a moderator if you have questions.",
+                        color=0xff0000
+                    )
+                    await user.send(embed=dm_embed)
+                except:
+                    # If DM fails, add a note to the thread
+                    await thread.send("Note: Could not send DM to user (they may have DMs disabled)")
+
+                # Archive the thread after a delay
+                await asyncio.sleep(5)
+                await thread.edit(archived=True, locked=True)
+            except discord.NotFound:
+                await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Error while denying: {str(e)}", ephemeral=True)
+
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+def create_onboarding_embed():
+    embed = discord.Embed(
+        title="🎬 Welcome to Our Media Server!",
+        description="",
+        color=0x00b8ff
+    )
+
+    # English Section
+    embed.add_field(
+        name="🇬🇧 English",
+        value=(
+            "**How to Get Started:**\n"
+            "1. Click the 'Request Access' button below\n"
+            "2. Wait for moderator approval\n"
+            "3. Once approved, you'll receive a Plex invite via Wizarr\n"
+            "4. Use Overseerr to request new content\n"
+            "5. Enjoy your media on Plex!\n\n"
+        ),
+        inline=False
+    )
+
+    # French Section
+    embed.add_field(
+        name="🇫🇷 Français",
+        value=(
+            "**Comment commencer:**\n"
+            "1. Cliquez sur le bouton 'Demander l'accès' ci-dessous\n"
+            "2. Attendez l'approbation d'un modérateur\n"
+            "3. Une fois approuvé, vous recevrez une invitation Plex via Wizarr\n"
+            "4. Utilisez Overseerr pour demander du nouveau contenu\n"
+            "5. Profitez de vos médias sur Plex!\n\n"
+        ),
+        inline=False
+    )
+
+    return embed
+
+@tree.command(
+    name="send_intro_embed",
+    description="Send the onboarding embed to the start-here channel.",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def send_intro_embed(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Find the start-here channel
+        start_here_channel = discord.utils.get(interaction.guild.channels, name="📖｜start-here")
+        if not start_here_channel:
+            await interaction.followup.send("❌ Could not find the start-here channel!", ephemeral=True)
+            return
+
+        # Create and send the embed
+        embed = create_onboarding_embed()
+        view = OnboardingView()
+        await start_here_channel.send(embed=embed, view=view)
+        
+        await interaction.followup.send("✅ Onboarding embed sent successfully!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type == discord.InteractionType.component:
+        if interaction.data["custom_id"] == "request_access":
+            await handle_access_request(interaction)
+
+async def handle_access_request(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Find the access-requests channel
+        requests_channel = discord.utils.get(interaction.guild.channels, name="🎫｜access-requests")
+        if not requests_channel:
+            await interaction.followup.send("❌ Could not find the access-requests channel!", ephemeral=True)
+            return
+
+        # Create a thread for the request
+        thread = await requests_channel.create_thread(
+            name=f"Access Request - {interaction.user.name}",
+            type=discord.ChannelType.private_thread
+        )
+
+        # Add the user to the thread
+        await thread.add_user(interaction.user)
+
+        # Create the request embed
+        embed = discord.Embed(
+            title="🎟 New Access Request",
+            description=f"User: {interaction.user.mention}\n\nPlease explain why you want access to the media server:",
+            color=0x00b8ff
+        )
+
+        # Create view with user ID
+        view = AccessRequestView(interaction.user.id)
+        await thread.send(embed=embed, view=view)
+
+        # Send confirmation to the user
+        await interaction.followup.send(
+            "✅ Your access request has been submitted! Please check the thread for updates.",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+def create_invite_embed():
+    embed = discord.Embed(
+        title="🎟️ Get Your Media Server Invite",
+        description=(
+            "Welcome to the invite channel! Here's your direct invite link:\n\n"
+            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/i/ETHUDN)**\n\n"
+            "Follow the steps below to get started with our media server."
+        ),
+        color=0x00b8ff
+    )
+
+    # English Section
+    embed.add_field(
+        name="🇬🇧 Getting Started",
+        value=(
+            "**Step 1: Get Your Plex Invite**\n"
+            "• Click the invite link above\n"
+            "• Sign up with your email\n"
+            "• Accept the Plex invitation\n\n"
+            "**Step 2: Access Content**\n"
+            "• Download [Plex](https://www.plex.tv/downloads)\n"
+            "• Sign in with your account\n"
+            "• Start streaming!\n\n"
+            "**Step 3: Request Content**\n"
+            "• Use [Overseerr](https://overseer.tessdev.fr) to request movies and shows\n"
+            "• Track your requests status\n"
+            "• Get notified when content is available"
+        ),
+        inline=False
+    )
+
+    # French Section
+    embed.add_field(
+        name="🇫🇷 Pour Commencer",
+        value=(
+            "**Étape 1: Obtenir Votre Invitation Plex**\n"
+            "• Cliquez sur le lien d'invitation ci-dessus\n"
+            "• Inscrivez-vous avec votre email\n"
+            "• Acceptez l'invitation Plex\n\n"
+            "**Étape 2: Accéder au Contenu**\n"
+            "• Téléchargez [Plex](https://www.plex.tv/downloads)\n"
+            "• Connectez-vous avec votre compte\n"
+            "• Commencez à streamer!\n\n"
+            "**Étape 3: Demander du Contenu**\n"
+            "• Utilisez [Overseerr](https://overseer.tessdev.fr) pour demander des films et séries\n"
+            "• Suivez le statut de vos demandes\n"
+            "• Soyez notifié quand le contenu est disponible"
+        ),
+        inline=False
+    )
+
+    # Important Notes
+    embed.add_field(
+        name="ℹ️ Important Notes | Notes Importantes",
+        value=(
+            "**🇬🇧**\n"
+            "• This invite link is for approved members only\n"
+            "• Keep your login information secure\n"
+            "• Don't share your account with others\n"
+            "• For support, contact an admin\n\n"
+            "**🇫🇷**\n"
+            "• Ce lien d'invitation est réservé aux membres approuvés\n"
+            "• Gardez vos informations de connexion sécurisées\n"
+            "• Ne partagez pas votre compte\n"
+            "• Pour le support, contactez un admin"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(
+        text="🔐 Access is limited to approved members only | Accès limité aux membres approuvés",
+        icon_url="https://cdn.discordapp.com/emojis/1039485258276737024.webp?size=96&quality=lossless"
+    )
+
+    return embed
+
+@tree.command(
+    name="send_invite_embed",
+    description="Send the get-invite embed to the channel.",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def send_invite_embed(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Find the get-invite channel
+        invite_channel = discord.utils.get(interaction.guild.channels, name="📬｜get-invite")
+        if not invite_channel:
+            await interaction.followup.send("❌ Could not find the get-invite channel!", ephemeral=True)
+            return
+
+        # Create and send the embed
+        embed = create_invite_embed()
+        await invite_channel.send(embed=embed)
+        
+        await interaction.followup.send("✅ Invite embed sent successfully!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
 def start_bot():
     if not TOKEN:
