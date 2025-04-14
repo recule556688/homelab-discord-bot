@@ -152,7 +152,7 @@ async def on_ready():
             status=discord.Status.dnd,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="Watching you and all your hardware 😏"
+                name="You and all your hardware 😏"
             )
         )
         # Get the test guild
