@@ -147,13 +147,19 @@ def create_health_embed():
 async def on_ready():
     print(f"🤖 Logged in as {bot.user}")
     try:
+        # Set status to DND with a custom activity
+        await bot.change_presence(
+            status=discord.Status.dnd,
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name="Watching you and all your hardware 😏"
+            )
+        )
         # Get the test guild
         guild = discord.Object(id=TEST_GUILD_ID)
-        
         # Sync the commands
         synced = await tree.sync(guild=guild)
         print(f"✅ Synced {len(synced)} commands to guild {TEST_GUILD_ID}")
-        
         # Restore dashboard if it exists
         state = load_dashboard_state()
         if state:
