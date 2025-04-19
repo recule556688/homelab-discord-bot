@@ -9,10 +9,6 @@ import json
 from plexapi.server import PlexServer
 from datetime import datetime, timedelta
 from discord.ui import Button, View
-import asyncio
-import requests
-from uptime_kuma_api import UptimeKumaApi, MonitorStatus
-import aiohttp
 
 # Load settings from .env
 load_dotenv()
