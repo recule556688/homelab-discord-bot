@@ -16,10 +16,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = int(os.getenv("TEST_GUILD_ID"))
 PLEX_URL = os.getenv("PLEX_URL")
 PLEX_TOKEN = os.getenv("PLEX_TOKEN")
-KUMA_URL = os.getenv("KUMA_URL")
-KUMA_API_KEY = os.getenv("KUMA_API_KEY")
-KUMA_USERNAME = os.getenv("KUMA_USERNAME")
-KUMA_PASSWORD = os.getenv("KUMA_PASSWORD")
 
 # Set up the bot with all intents
 intents = discord.Intents.all()
