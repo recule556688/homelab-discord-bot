@@ -10,6 +10,9 @@ from plexapi.server import PlexServer
 from datetime import datetime, timedelta
 from discord.ui import Button, View
 import asyncio
+import requests
+from uptime_kuma_api import UptimeKumaApi, MonitorStatus
+import aiohttp
 
 # Load settings from .env
 load_dotenv()
@@ -17,6 +20,10 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = int(os.getenv("TEST_GUILD_ID"))
 PLEX_URL = os.getenv("PLEX_URL")
 PLEX_TOKEN = os.getenv("PLEX_TOKEN")
+KUMA_URL = os.getenv("KUMA_URL")
+KUMA_API_KEY = os.getenv("KUMA_API_KEY")
+KUMA_USERNAME = os.getenv("KUMA_USERNAME")
+KUMA_PASSWORD = os.getenv("KUMA_PASSWORD")
 
 # Set up the bot with all intents
 intents = discord.Intents.all()
@@ -143,8 +150,32 @@ def create_health_embed():
         icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
     )
 
-    return embed
+    # Add Uptime Kuma monitors if available
+    kuma_data = get_kuma_monitors()
+    if kuma_data and 'heartbeatList' in kuma_data:
+        monitors = kuma_data.get('heartbeatList', [])
+        if monitors:
+            # Create a formatted string with monitor statuses
+            kuma_stats = (
+                f"```ansi\n"
+                f"\u001b[1;33mUPTIME MONITORS\u001b[0m\n"
+                f"┌──────────────────────────┐\n"
+            )
+            
+            for monitor in monitors:
+                name = monitor.get('name', 'Unknown')
+                status = monitor.get('status', 0)
+                status_color = "32" if status == 1 else "31"  # Green if up, red if down
+                status_text = "UP" if status == 1 else "DOWN"
+                kuma_stats += f"│ {name}: \u001b[1;{status_color}m{status_text}\u001b[0m\n"
+                
+            kuma_stats += (
+                f"└──────────────────────────┘\n"
+                f"```"
+            )
+            embed.add_field(name="", value=kuma_stats, inline=False)
 
+    return embed
 
 @bot.event
 async def on_ready():
@@ -283,7 +314,7 @@ async def setup_commands():
             description="Strictly restrict channel visibility for new users",
             callback=restrict_channels,
             default_permissions=discord.Permissions(administrator=True)
-        )
+        ),
     ]
     
     # Add each command to the tree
@@ -940,7 +971,8 @@ class ChannelManagementView(View):
             
         if not has_permission:
             await interaction.response.send_message(
-                "❌ You don't have permission to delete this channel. Only Admins and Maintainers can do this.",
+                "❌ 🇺🇸 You don't have permission to delete this channel. Only Admins and Maintainers can do this.\n\n" +
+                "🇫🇷 Vous n'avez pas la permission de supprimer ce canal. Seuls les Admins et les Mainteneurs peuvent le faire.",
                 ephemeral=True
             )
             return
@@ -971,12 +1003,18 @@ class AccessRequestView(View):
             has_permission = True
             
         if not has_permission:
-            await interaction.response.send_message(
-                "❌ You don't have permission to approve requests. Only Admins and Maintainers can do this.",
-                ephemeral=True
-            )
+            # Acknowledge the interaction first to prevent timeout
+            try:
+                await interaction.response.send_message(
+                    "❌ 🇺🇸 You don't have permission to approve requests. Only Admins and Maintainers can do this.\n\n" +
+                    "🇫🇷 Vous n'avez pas la permission d'approuver les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
+                    ephemeral=True
+                )
+            except discord.errors.NotFound:
+                # Interaction already expired
+                return
             return
-            
+        
         try:
             # Get the channel
             channel = interaction.channel
@@ -991,8 +1029,12 @@ class AccessRequestView(View):
             except:
                 pass
             
-            # Acknowledge the interaction first
-            await interaction.response.defer()
+            # Acknowledge the interaction first - wrap in try/except
+            try:
+                await interaction.response.defer()
+            except discord.errors.NotFound:
+                # If interaction already expired, we can't continue
+                return
             
             try:
                 user = await interaction.guild.fetch_member(self.user_id)
@@ -1017,8 +1059,11 @@ class AccessRequestView(View):
                     
                     # Send approval message in channel with request number
                     embed = discord.Embed(
-                        title=f"✅ Request #{request_number} Approved",
-                        description=f"{user.mention} has been approved for access!\n\nThey can now access the invite channel.",
+                        title=f"✅ Request #{request_number} Approved | Demande #{request_number} Approuvée",
+                        description=f"🇺🇸 {user.mention} has been approved for access!\n\n" +
+                                    f"They can now access the invite channel.\n\n" +
+                                    f"🇫🇷 {user.mention} a été approuvé pour l'accès !\n\n" +
+                                    f"Ils peuvent maintenant accéder au canal d'invitation.",
                         color=0x00ff00
                     )
                     await interaction.followup.send(embed=embed)
@@ -1026,8 +1071,9 @@ class AccessRequestView(View):
                     # Send a DM to the user with request number
                     try:
                         dm_embed = discord.Embed(
-                            title=f"🎉 Access Request #{request_number} Approved!",
-                            description="Your access request has been approved! You can now access the invite channel.",
+                            title=f"🎉 Access Request #{request_number} Approved! | Demande d'Accès #{request_number} Approuvée !",
+                            description="🇺🇸 Your access request has been approved! You can now access the invite channel.\n\n" +
+                                        "🇫🇷 Votre demande d'accès a été approuvée ! Vous pouvez maintenant accéder au canal d'invitation.",
                             color=0x00ff00
                         )
                         await user.send(embed=dm_embed)
@@ -1037,7 +1083,8 @@ class AccessRequestView(View):
 
                     # Add a message about channel deletion
                     await channel.send(
-                        f"✅ Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.",
+                        f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n" +
+                        f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
                         delete_after=300  # Delete after 5 minutes
                     )
                 else:
@@ -1066,11 +1113,17 @@ class AccessRequestView(View):
             
         if not has_permission:
             await interaction.response.send_message(
-                "❌ You don't have permission to deny requests. Only Admins and Maintainers can do this.",
+                "❌ 🇺🇸 You don't have permission to deny requests. Only Admins and Maintainers can do this.\n\n" +
+                "🇫🇷 Vous n'avez pas la permission de refuser les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
                 ephemeral=True
             )
             return
-            
+        
+        # Show the modal to collect the denial reason
+        modal = DenialReasonModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def process_denial(self, interaction: discord.Interaction, reason: str):
         try:
             # Get the channel
             channel = interaction.channel
@@ -1084,9 +1137,6 @@ class AccessRequestView(View):
                     request_number = channel_name_parts[1]
             except:
                 pass
-            
-            # Acknowledge the interaction first
-            await interaction.response.defer()
             
             try:
                 user = await interaction.guild.fetch_member(self.user_id)
@@ -1109,21 +1159,50 @@ class AccessRequestView(View):
                 if denied_role:
                     await user.add_roles(denied_role)
 
-                # Send denial message in channel with request number
+                # Format reason
+                formatted_reason = f"**Reason | Raison:**\n{reason}"
+
+                # Send denial message in channel with request number and reason
                 embed = discord.Embed(
-                    title=f"❌ Request #{request_number} Denied",
-                    description=f"{user.mention}'s access request has been denied.",
+                    title=f"❌ Request #{request_number} Denied | Demande #{request_number} Refusée",
+                    description=f"🇺🇸 {user.mention}'s access request has been denied.\n\n" +
+                                f"🇫🇷 La demande d'accès de {user.mention} a été refusée.",
                     color=0xff0000
                 )
+                
+                # Add the reason field
+                embed.add_field(
+                    name="Denial Reason | Raison du refus",
+                    value=formatted_reason,
+                    inline=False
+                )
+                
                 await interaction.followup.send(embed=embed)
 
-                # Send a DM to the user with request number
+                # Send a DM to the user with request number and reason
                 try:
                     dm_embed = discord.Embed(
-                        title=f"❌ Access Request #{request_number} Denied",
-                        description="Your access request has been denied. Please contact a moderator if you have questions.",
+                        title=f"❌ Access Request #{request_number} Denied | Demande d'Accès #{request_number} Refusée",
+                        description="🇺🇸 Your access request has been denied.\n\n" +
+                                    "🇫🇷 Votre demande d'accès a été refusée.",
                         color=0xff0000
                     )
+                    
+                    # Add the reason field to DM
+                    dm_embed.add_field(
+                        name="Denial Reason | Raison du refus",
+                        value=formatted_reason,
+                        inline=False
+                    )
+                    
+                    # Add contact info
+                    dm_embed.add_field(
+                        name="Questions? | Des questions?",
+                        value="🇺🇸 If you have questions, please contact a moderator.\n\n" +
+                              "🇫🇷 Si vous avez des questions, veuillez contacter un modérateur.",
+                        inline=False
+                    )
+                    
                     await user.send(embed=dm_embed)
                 except:
                     # If DM fails, add a note to the channel
@@ -1131,7 +1210,8 @@ class AccessRequestView(View):
 
                 # Add a message about channel deletion
                 await channel.send(
-                    f"✅ Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.",
+                    f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n" +
+                    f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
                     delete_after=300  # Delete after 5 minutes
                 )
             except discord.NotFound:
@@ -1140,10 +1220,7 @@ class AccessRequestView(View):
                 await interaction.followup.send(f"❌ Error while denying: {str(e)}", ephemeral=True)
 
         except Exception as e:
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
 def create_onboarding_embed():
     embed = discord.Embed(
@@ -1154,7 +1231,7 @@ def create_onboarding_embed():
 
     # English Section
     embed.add_field(
-        name="🇬🇧 English",
+        name="🇺🇸 English",
         value=(
             "**How to Get Started:**\n"
             "1. Click the 'Request Access' button below\n"
@@ -1231,7 +1308,8 @@ class ThreadManagementView(View):
             
         if not has_permission:
             await interaction.response.send_message(
-                "❌ You don't have permission to delete this thread. Only Admins and Maintainers can do this.",
+                "❌ 🇺🇸 You don't have permission to delete this thread. Only Admins and Maintainers can do this.\n\n" +
+                "🇫🇷 Vous n'avez pas la permission de supprimer ce fil. Seuls les Admins et les Mainteneurs peuvent le faire.",
                 ephemeral=True
             )
             return
@@ -1346,22 +1424,35 @@ async def handle_access_request(interaction: discord.Interaction):
             color=0x808080  # Gray
         )
         
+        # Add French translation
+        admin_embed.add_field(
+            name="🇫🇷 Gestion de Requête",
+            value=f"Ceci est un canal privé pour une demande d'accès de {user.mention}.\n\n" +
+                  f"{admin_role.mention if admin_role else 'Admins'} et " +
+                  f"{maintainer_role.mention if maintainer_role else 'Mainteneurs'}: " +
+                  f"Vous pouvez supprimer ce canal en utilisant le bouton ci-dessous une fois terminé.",
+            inline=False
+        )
+        
         # Send admin message with delete button
         channel_mgmt_view = ChannelManagementView()
         await request_channel.send(embed=admin_embed, view=channel_mgmt_view)
         
-        # Then send the user request embed
+        # Then send the user request embed - Integrated bilingual format
         user_embed = discord.Embed(
-            title=f"🎟 Access Request #{request_counter}",
-            description=f"User: {user.mention}\n\nPlease explain why you want access to the media server:",
+            title=f"🎟 Access Request #{request_counter} | Demande d'Accès #{request_counter}",
+            description=f"🇺🇸 User: {user.mention}\n🇫🇷 Utilisateur: {user.mention}\n\n" +
+                        f"🇺🇸 Please explain why you want access to the media server:\n" +
+                        f"🇫🇷 Veuillez expliquer pourquoi vous souhaitez accéder au serveur multimédia:",
             color=0x00b8ff
         )
         
-        # Add a note indicating they've been assigned the Pending role
+        # Add status info in a clean format
         if pending_role:
             user_embed.add_field(
-                name="Status",
-                value=f"You've been assigned the {pending_role.mention} role while your request is processed.",
+                name="Status | Statut",
+                value=f"🇺🇸 You've been assigned the {pending_role.mention} role while your request is processed.\n" +
+                      f"🇫🇷 Le rôle {pending_role.mention} vous a été attribué pendant le traitement de votre demande.",
                 inline=False
             )
         
@@ -1371,7 +1462,8 @@ async def handle_access_request(interaction: discord.Interaction):
         
         # Notify the user with a link to the private channel
         await interaction.followup.send(
-            f"✅ Your access request #{request_counter} has been submitted! Please check the private channel: {request_channel.mention}",
+            f"✅ 🇺🇸 Your access request #{request_counter} has been submitted! Please check the private channel: {request_channel.mention}\n\n" +
+            f"🇫🇷 Votre demande d'accès #{request_counter} a été soumise ! Veuillez consulter le canal privé: {request_channel.mention}",
             ephemeral=True
         )
         
@@ -1386,7 +1478,6 @@ def create_invite_embed():
         title="🎟️ Get Your Media Server Invite",
         description=(
             "Welcome to the invite channel! Here's your direct invite link:\n\n"
-            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/i/ETHUDN)**\n\n"
             "Follow the steps below to get started with our media server."
         ),
         color=0x00b8ff
@@ -1394,14 +1485,15 @@ def create_invite_embed():
 
     # English Section
     embed.add_field(
-        name="🇬🇧 Getting Started",
+        name="🇺🇸 Getting Started",
         value=(
             "**Step 1: Get Your Plex Invite**\n"
-            "• Click the invite link above\n"
+            "• Click the invite link below\n"
+            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/i/QOZEPF)**\n\n"
             "• Sign up with your email\n"
             "• Accept the Plex invitation\n\n"
             "**Step 2: Access Content**\n"
-            "• Download [Plex](https://www.plex.tv/downloads)\n"
+            "• Download [Plex](https://www.plex.tv/downloads) on your PC, Mac, or mobile device\n"
             "• Sign in with your account\n"
             "• Start streaming!\n\n"
             "**Step 3: Request Content**\n"
@@ -1417,11 +1509,12 @@ def create_invite_embed():
         name="🇫🇷 Pour Commencer",
         value=(
             "**Étape 1: Obtenir Votre Invitation Plex**\n"
-            "• Cliquez sur le lien d'invitation ci-dessus\n"
+            "• Cliquez sur le lien d'invitation ci-dessous\n"
+            "**🔗 [Cliquez Ici pour Joindre](https://wizarr.tessdev.fr/i/QOZEPF)**\n\n"
             "• Inscrivez-vous avec votre email\n"
             "• Acceptez l'invitation Plex\n\n"
             "**Étape 2: Accéder au Contenu**\n"
-            "• Téléchargez [Plex](https://www.plex.tv/downloads)\n"
+            "• Téléchargez [Plex](https://www.plex.tv/downloads) sur votre PC, Mac, ou appareil mobile\n"
             "• Connectez-vous avec votre compte\n"
             "• Commencez à streamer!\n\n"
             "**Étape 3: Demander du Contenu**\n"
@@ -1436,7 +1529,7 @@ def create_invite_embed():
     embed.add_field(
         name="ℹ️ Important Notes | Notes Importantes",
         value=(
-            "**🇬🇧**\n"
+            "**🇺🇸**\n"
             "• This invite link is for approved members only\n"
             "• Keep your login information secure\n"
             "• Don't share your account with others\n"
@@ -2396,6 +2489,101 @@ async def fix_read_permissions(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+# Add this class for the denial reason modal
+class DenialReasonModal(discord.ui.Modal):
+    def __init__(self, view_instance):
+        super().__init__(title="Denial Reason")
+        self.view_instance = view_instance
+        
+        self.reason_input = discord.ui.TextInput(
+            label="Reason for denial",
+            placeholder="Please explain why this request is being denied...",
+            style=discord.TextStyle.paragraph,
+            required=True,
+            max_length=1000
+        )
+        self.add_item(self.reason_input)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        await self.view_instance.process_denial(interaction, self.reason_input.value)
+
+def create_overseerr_embed():
+    embed = discord.Embed(
+        title="🎬 Media Request Guide | Guide de Demande de Média",
+        color=0x00b8ff
+    )
+
+    # English Section
+    embed.add_field(
+        name="🇺🇸 How to Request Media",
+        value=(
+            "Welcome to the Overseerr request channel! 🎬\n"
+            "Here you can request movies or TV shows you'd like to see on the media server (Plex).\n\n"
+            "📍 To make a request:\n"
+            "1. Visit [Overseerr](https://overseer.tessdev.fr)\n"
+            "2. Log in using your **Discord** account\n"
+            "3. Use the search bar to find the movie or series you want\n"
+            "4. Click on **\"Request\"** — and you're done!\n\n"
+            "💡 Once approved, your request will be downloaded and added to the server automatically.\n\n"
+            "If you need help, feel free to ask in this channel or contact an admin.\n"
+            "Enjoy! 🍿\n\n"
+        ),
+        inline=False
+    )
+
+    # French Section
+    embed.add_field(
+        name="\n🇫🇷 Comment faire une demande de contenu",
+        value=(
+            "Bienvenue sur le canal de demande Overseerr ! 🎬\n"
+            "Ici, vous pouvez demander des **films ou séries** que vous souhaitez voir sur le serveur média (Plex).\n\n"
+            "📍 Pour faire une demande :\n"
+            "1. Allez sur [Overseerr](https://overseer.tessdev.fr)\n"
+            "2. Connectez-vous avec votre **compte Discord**\n"
+            "3. Utilisez la barre de recherche pour trouver le film ou la série souhaité(e)\n"
+            "4. Cliquez sur **\"Demander\"** — et c'est terminé !\n\n"
+            "💡 Une fois approuvée, votre demande sera automatiquement téléchargée et ajoutée au serveur.\n\n"
+            "Si vous avez besoin d'aide, posez votre question ici ou contactez un admin.\n"
+            "Bon visionnage ! 🍿"
+        ),
+        inline=False
+    )
+
+    return embed
+
+# Add this class for the button that redirects to Overseerr
+class OverseerrView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+        # Add a URL button directly instead of using the decorator
+        overseerr_button = discord.ui.Button(
+            label="🔍 Go to Overseerr | Aller à Overseerr", 
+            style=discord.ButtonStyle.link,
+            url="https://overseer.tessdev.fr"
+        )
+        self.add_item(overseerr_button)
+
+# Add a command to send the overseerr embed
+@tree.command(
+    name="send_overseerr_embed",
+    description="Send the Overseerr guide embed to the channel.",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def send_overseerr_embed(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Create and send the embed with button
+        embed = create_overseerr_embed()
+        view = OverseerrView()
+        await interaction.channel.send(embed=embed, view=view)
+        
+        await interaction.followup.send("✅ Overseerr guide embed sent successfully!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
 if __name__ == "__main__":
     start_bot()
