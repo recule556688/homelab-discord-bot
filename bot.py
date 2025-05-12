@@ -42,7 +42,9 @@ COUNTER_STATE_FILE = os.path.join(
 
 
 # File to store user associations
-USER_MAPPING_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "overseerr_users.json")
+USER_MAPPING_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data", "overseerr_users.json"
+)
 
 # Get the API key and URL from environment
 OVERSEERR_URL = os.getenv("OVERSEERR_URL", "https://overseer.tessdev.fr")
@@ -50,6 +52,7 @@ OVERSEERR_API_KEY = os.getenv("OVERSEERR_API_KEY")
 
 # Global variable for caching users
 overseerr_users_cache = []
+
 
 def get_plex_connection():
     """Create a connection to Plex server"""
@@ -115,6 +118,7 @@ def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
     uptime_seconds = time.time() - psutil.boot_time()
     uptime_str = format_uptime(uptime_seconds)
+    print("DEBUG UPTIME:", uptime_seconds, uptime_str)
 
     # Gather CPU and RAM usage using psutil
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -182,6 +186,7 @@ def create_health_embed():
         text=f"🔄 Auto-updates every 30s • Last update: {current_time}",
         icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png",
     )
+
 
 @bot.event
 async def on_ready():
@@ -1039,7 +1044,10 @@ class ChannelManagementView(View):
             channel = interaction.channel
             await channel.delete()
         except Exception as e:
-            await interaction.followup.send(f"❌ Error deleting channel: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ Error deleting channel: {str(e)}", ephemeral=True
+            )
+
 
 def save_user_mapping(discord_id, overseerr_username):
     """Save a Discord user to Overseerr username mapping"""
@@ -1049,19 +1057,20 @@ def save_user_mapping(discord_id, overseerr_username):
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         # Add or update mapping
         mappings[overseerr_username.lower()] = discord_id
-        
+
         # Save mappings
         os.makedirs(os.path.dirname(USER_MAPPING_FILE), exist_ok=True)
         with open(USER_MAPPING_FILE, "w") as f:
             json.dump(mappings, f)
-            
+
         return True
     except Exception as e:
         print(f"Error saving user mapping: {e}")
         return False
+
 
 def get_discord_id_for_overseerr_user(overseerr_username):
     """Get the Discord ID associated with an Overseerr username"""
@@ -1074,18 +1083,29 @@ def get_discord_id_for_overseerr_user(overseerr_username):
         print(f"Error loading user mapping: {e}")
     return None
 
+
 # Create a function for the autocomplete
-async def overseerr_username_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+async def overseerr_username_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> List[app_commands.Choice[str]]:
     """Autocomplete for Overseerr usernames"""
     choices = []
-    
+
     if not overseerr_users_cache:
         # If the cache is empty, try to fetch users synchronously
         try:
             users = await get_overseerr_users()
             for user in users:
-                if current.lower() in user.get("displayName", "").lower() or current.lower() in user.get("email", "").lower():
-                    choices.append(app_commands.Choice(name=user.get("displayName", ""), value=user.get("displayName", "")))
+                if (
+                    current.lower() in user.get("displayName", "").lower()
+                    or current.lower() in user.get("email", "").lower()
+                ):
+                    choices.append(
+                        app_commands.Choice(
+                            name=user.get("displayName", ""),
+                            value=user.get("displayName", ""),
+                        )
+                    )
                     if len(choices) >= 25:  # Discord limits autocomplete to 25 choices
                         break
         except Exception as e:
@@ -1093,12 +1113,21 @@ async def overseerr_username_autocomplete(interaction: discord.Interaction, curr
     else:
         # Use the cache
         for user in overseerr_users_cache:
-            if current.lower() in user.get("displayName", "").lower() or current.lower() in user.get("email", "").lower():
-                choices.append(app_commands.Choice(name=user.get("displayName", ""), value=user.get("displayName", "")))
+            if (
+                current.lower() in user.get("displayName", "").lower()
+                or current.lower() in user.get("email", "").lower()
+            ):
+                choices.append(
+                    app_commands.Choice(
+                        name=user.get("displayName", ""),
+                        value=user.get("displayName", ""),
+                    )
+                )
                 if len(choices) >= 25:  # Discord limits autocomplete to 25 choices
                     break
-    
+
     return choices
+
 
 @tree.command(
     name="link_overseerr",
@@ -1109,11 +1138,11 @@ async def overseerr_username_autocomplete(interaction: discord.Interaction, curr
 async def link_overseerr(interaction: discord.Interaction, overseerr_username: str):
     """Link a Discord user to their Overseerr username with autocomplete"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         discord_id = interaction.user.id
         success = save_user_mapping(discord_id, overseerr_username)
-        
+
         if success:
             embed = discord.Embed(
                 title="✅ Account Linked | Compte Lié",
@@ -1123,13 +1152,17 @@ async def link_overseerr(interaction: discord.Interaction, overseerr_username: s
                     f"🇫🇷 Votre compte Discord a été lié au nom d'utilisateur Overseerr: **{overseerr_username}**\n"
                     f"Vous serez désormais notifié lorsque votre contenu demandé sera disponible."
                 ),
-                color=0x00b8ff
+                color=0x00B8FF,
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
-            await interaction.followup.send("❌ Error saving your username mapping. Please try again.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Error saving your username mapping. Please try again.",
+                ephemeral=True,
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="unlink_overseerr",
@@ -1140,25 +1173,25 @@ async def link_overseerr(interaction: discord.Interaction, overseerr_username: s
 async def unlink_overseerr(interaction: discord.Interaction, overseerr_username: str):
     """Unlink a Discord user from their Overseerr username"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Load existing mappings
         mappings = {}
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         # Check if mapping exists
         if overseerr_username.lower() in mappings:
             # Check if the mapping belongs to this user
             if str(mappings[overseerr_username.lower()]) == str(interaction.user.id):
                 # Remove mapping
                 del mappings[overseerr_username.lower()]
-                
+
                 # Save updated mappings
                 with open(USER_MAPPING_FILE, "w") as f:
                     json.dump(mappings, f)
-                
+
                 embed = discord.Embed(
                     title="✅ Account Unlinked | Compte Délié",
                     description=(
@@ -1167,41 +1200,47 @@ async def unlink_overseerr(interaction: discord.Interaction, overseerr_username:
                         f"🇫🇷 Votre compte Discord a été délié du nom d'utilisateur Overseerr: **{overseerr_username}**\n"
                         f"Vous ne recevrez plus de notifications pour ce compte."
                     ),
-                    color=0x00b8ff
+                    color=0x00B8FF,
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send("❌ This Overseerr username is linked to a different Discord account.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ This Overseerr username is linked to a different Discord account.",
+                    ephemeral=True,
+                )
         else:
-            await interaction.followup.send("❌ No link found for this Overseerr username.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ No link found for this Overseerr username.", ephemeral=True
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @bot.event
 async def on_message(message):
     # Ignore messages from the bot itself
     if message.author == bot.user:
         return
-    
+
     # Check if this is a webhook message from Overseerr
     if message.webhook_id and message.embeds:
         try:
             embed = message.embeds[0]
-            
+
             # Variable to track if this is an availability notification
             is_available_notification = False
-            
+
             # Check if "Available" is in the title
             if "Available" in embed.title:
                 is_available_notification = True
-            
+
             # Also check if there's a "Request Status" field with value "Available"
             if not is_available_notification:
                 for field in embed.fields:
                     if field.name == "Request Status" and field.value == "Available":
                         is_available_notification = True
                         break
-                
+
             # Process the notification if it's an availability notification
             if is_available_notification:
                 # Extract the media title - it should be at the beginning or in a specific format
@@ -1209,41 +1248,53 @@ async def on_message(message):
                 if embed.title == "Movie Request Now Available":
                     # For the format in the screenshot
                     if hasattr(embed, "description") and embed.description:
-                        first_line = embed.description.split('\n')[0] if '\n' in embed.description else embed.description
+                        first_line = (
+                            embed.description.split("\n")[0]
+                            if "\n" in embed.description
+                            else embed.description
+                        )
                         media_title = first_line
                 else:
                     # For new format - the title is the embed title itself
                     media_title = embed.title
-                
+
                 # Extract the requester username
                 requester = None
-                
+
                 # Method 1: Check in the standard embed fields
                 for field in embed.fields:
                     if field.name == "Requested By":
                         requester = field.value
                         break
-                
+
                 # Method 2: Look for specific patterns in the embed description or footer
-                if not requester and hasattr(embed, "description") and embed.description:
+                if (
+                    not requester
+                    and hasattr(embed, "description")
+                    and embed.description
+                ):
                     # Try to find "Requested By" pattern in description
-                    requester_match = re.search(r"Requested By\s*\n([^\n]+)", embed.description)
+                    requester_match = re.search(
+                        r"Requested By\s*\n([^\n]+)", embed.description
+                    )
                     if requester_match:
                         requester = requester_match.group(1).strip()
-                
+
                 # Method 3: Check the footer text
                 if not requester and hasattr(embed, "footer") and embed.footer.text:
-                    requester_match = re.search(r"Requested By[:\s]+([^\n]+)", embed.footer.text)
+                    requester_match = re.search(
+                        r"Requested By[:\s]+([^\n]+)", embed.footer.text
+                    )
                     if requester_match:
                         requester = requester_match.group(1).strip()
-                
+
                 # If we found a requester, look up their Discord ID
                 if requester:
                     # Clean up any formatting from the username
-                    cleaned_requester = re.sub(r'[<>@*_~|`]', '', requester).strip()
-                    
+                    cleaned_requester = re.sub(r"[<>@*_~|`]", "", requester).strip()
+
                     discord_id = get_discord_id_for_overseerr_user(cleaned_requester)
-                    
+
                     if discord_id:
                         # Get the guild member
                         guild = message.guild
@@ -1256,12 +1307,14 @@ async def on_message(message):
                                     if channel.name == "🍿｜now-available":
                                         notification_channel = channel
                                         break
-                                
+
                                 # If channel not found, use the original channel
                                 if notification_channel is None:
                                     notification_channel = message.channel
-                                    print(f"Warning: Notification channel '🍿｜now-available' not found, using original channel")
-                                
+                                    print(
+                                        f"Warning: Notification channel '🍿｜now-available' not found, using original channel"
+                                    )
+
                                 # Send a notification
                                 notification = (
                                     f"🎉 Hey {member.mention}! **{media_title}** that you requested is now available on Plex!\n"
@@ -1275,14 +1328,17 @@ async def on_message(message):
                         except Exception as e:
                             print(f"Error notifying user: {e}")
                     else:
-                        print(f"No Discord ID found for Overseerr user: '{cleaned_requester}'")
+                        print(
+                            f"No Discord ID found for Overseerr user: '{cleaned_requester}'"
+                        )
                 else:
                     print(f"Could not extract requester from embed")
         except Exception as e:
             print(f"Error processing webhook: {e}")
-    
+
     # Continue processing commands
     await bot.process_commands(message)
+
 
 @tree.command(
     name="list_overseerr_links",
@@ -1293,45 +1349,50 @@ async def on_message(message):
 async def list_overseerr_links(interaction: discord.Interaction):
     """List all Discord to Overseerr account links"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Load existing mappings
         mappings = {}
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         if not mappings:
-            await interaction.followup.send("No Discord to Overseerr account links found.", ephemeral=True)
+            await interaction.followup.send(
+                "No Discord to Overseerr account links found.", ephemeral=True
+            )
             return
-        
+
         # Create an embed to display the links
         embed = discord.Embed(
             title="Discord to Overseerr Account Links",
             description="Below are all the current account links:",
-            color=0x00b8ff
+            color=0x00B8FF,
         )
-        
+
         for overseerr_user, discord_id in mappings.items():
             try:
                 guild = interaction.guild
                 member = await guild.fetch_member(int(discord_id))
-                member_name = member.display_name if member else f"Unknown User ({discord_id})"
+                member_name = (
+                    member.display_name if member else f"Unknown User ({discord_id})"
+                )
                 embed.add_field(
                     name=f"Overseerr: {overseerr_user}",
                     value=f"Discord: {member_name} ({discord_id})",
-                    inline=False
+                    inline=False,
                 )
             except Exception as e:
                 embed.add_field(
                     name=f"Overseerr: {overseerr_user}",
                     value=f"Discord: Unknown User ({discord_id}) - Error: {str(e)}",
-                    inline=False
+                    inline=False,
                 )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 def save_user_mapping(discord_id, overseerr_username):
     """Save a Discord user to Overseerr username mapping"""
@@ -1341,19 +1402,20 @@ def save_user_mapping(discord_id, overseerr_username):
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         # Add or update mapping
         mappings[overseerr_username.lower()] = discord_id
-        
+
         # Save mappings
         os.makedirs(os.path.dirname(USER_MAPPING_FILE), exist_ok=True)
         with open(USER_MAPPING_FILE, "w") as f:
             json.dump(mappings, f)
-            
+
         return True
     except Exception as e:
         print(f"Error saving user mapping: {e}")
         return False
+
 
 def get_discord_id_for_overseerr_user(overseerr_username):
     """Get the Discord ID associated with an Overseerr username"""
@@ -1366,18 +1428,29 @@ def get_discord_id_for_overseerr_user(overseerr_username):
         print(f"Error loading user mapping: {e}")
     return None
 
+
 # Create a function for the autocomplete
-async def overseerr_username_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+async def overseerr_username_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> List[app_commands.Choice[str]]:
     """Autocomplete for Overseerr usernames"""
     choices = []
-    
+
     if not overseerr_users_cache:
         # If the cache is empty, try to fetch users synchronously
         try:
             users = await get_overseerr_users()
             for user in users:
-                if current.lower() in user.get("displayName", "").lower() or current.lower() in user.get("email", "").lower():
-                    choices.append(app_commands.Choice(name=user.get("displayName", ""), value=user.get("displayName", "")))
+                if (
+                    current.lower() in user.get("displayName", "").lower()
+                    or current.lower() in user.get("email", "").lower()
+                ):
+                    choices.append(
+                        app_commands.Choice(
+                            name=user.get("displayName", ""),
+                            value=user.get("displayName", ""),
+                        )
+                    )
                     if len(choices) >= 25:  # Discord limits autocomplete to 25 choices
                         break
         except Exception as e:
@@ -1385,12 +1458,21 @@ async def overseerr_username_autocomplete(interaction: discord.Interaction, curr
     else:
         # Use the cache
         for user in overseerr_users_cache:
-            if current.lower() in user.get("displayName", "").lower() or current.lower() in user.get("email", "").lower():
-                choices.append(app_commands.Choice(name=user.get("displayName", ""), value=user.get("displayName", "")))
+            if (
+                current.lower() in user.get("displayName", "").lower()
+                or current.lower() in user.get("email", "").lower()
+            ):
+                choices.append(
+                    app_commands.Choice(
+                        name=user.get("displayName", ""),
+                        value=user.get("displayName", ""),
+                    )
+                )
                 if len(choices) >= 25:  # Discord limits autocomplete to 25 choices
                     break
-    
+
     return choices
+
 
 @tree.command(
     name="link_overseerr",
@@ -1401,11 +1483,11 @@ async def overseerr_username_autocomplete(interaction: discord.Interaction, curr
 async def link_overseerr(interaction: discord.Interaction, overseerr_username: str):
     """Link a Discord user to their Overseerr username with autocomplete"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         discord_id = interaction.user.id
         success = save_user_mapping(discord_id, overseerr_username)
-        
+
         if success:
             embed = discord.Embed(
                 title="✅ Account Linked | Compte Lié",
@@ -1415,13 +1497,17 @@ async def link_overseerr(interaction: discord.Interaction, overseerr_username: s
                     f"🇫🇷 Votre compte Discord a été lié au nom d'utilisateur Overseerr: **{overseerr_username}**\n"
                     f"Vous serez désormais notifié lorsque votre contenu demandé sera disponible."
                 ),
-                color=0x00b8ff
+                color=0x00B8FF,
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
-            await interaction.followup.send("❌ Error saving your username mapping. Please try again.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Error saving your username mapping. Please try again.",
+                ephemeral=True,
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="unlink_overseerr",
@@ -1432,25 +1518,25 @@ async def link_overseerr(interaction: discord.Interaction, overseerr_username: s
 async def unlink_overseerr(interaction: discord.Interaction, overseerr_username: str):
     """Unlink a Discord user from their Overseerr username"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Load existing mappings
         mappings = {}
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         # Check if mapping exists
         if overseerr_username.lower() in mappings:
             # Check if the mapping belongs to this user
             if str(mappings[overseerr_username.lower()]) == str(interaction.user.id):
                 # Remove mapping
                 del mappings[overseerr_username.lower()]
-                
+
                 # Save updated mappings
                 with open(USER_MAPPING_FILE, "w") as f:
                     json.dump(mappings, f)
-                
+
                 embed = discord.Embed(
                     title="✅ Account Unlinked | Compte Délié",
                     description=(
@@ -1459,41 +1545,47 @@ async def unlink_overseerr(interaction: discord.Interaction, overseerr_username:
                         f"🇫🇷 Votre compte Discord a été délié du nom d'utilisateur Overseerr: **{overseerr_username}**\n"
                         f"Vous ne recevrez plus de notifications pour ce compte."
                     ),
-                    color=0x00b8ff
+                    color=0x00B8FF,
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send("❌ This Overseerr username is linked to a different Discord account.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ This Overseerr username is linked to a different Discord account.",
+                    ephemeral=True,
+                )
         else:
-            await interaction.followup.send("❌ No link found for this Overseerr username.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ No link found for this Overseerr username.", ephemeral=True
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @bot.event
 async def on_message(message):
     # Ignore messages from the bot itself
     if message.author == bot.user:
         return
-    
+
     # Check if this is a webhook message from Overseerr
     if message.webhook_id and message.embeds:
         try:
             embed = message.embeds[0]
-            
+
             # Variable to track if this is an availability notification
             is_available_notification = False
-            
+
             # Check if "Available" is in the title
             if "Available" in embed.title:
                 is_available_notification = True
-            
+
             # Also check if there's a "Request Status" field with value "Available"
             if not is_available_notification:
                 for field in embed.fields:
                     if field.name == "Request Status" and field.value == "Available":
                         is_available_notification = True
                         break
-                
+
             # Process the notification if it's an availability notification
             if is_available_notification:
                 # Extract the media title - it should be at the beginning or in a specific format
@@ -1501,41 +1593,53 @@ async def on_message(message):
                 if embed.title == "Movie Request Now Available":
                     # For the format in the screenshot
                     if hasattr(embed, "description") and embed.description:
-                        first_line = embed.description.split('\n')[0] if '\n' in embed.description else embed.description
+                        first_line = (
+                            embed.description.split("\n")[0]
+                            if "\n" in embed.description
+                            else embed.description
+                        )
                         media_title = first_line
                 else:
                     # For new format - the title is the embed title itself
                     media_title = embed.title
-                
+
                 # Extract the requester username
                 requester = None
-                
+
                 # Method 1: Check in the standard embed fields
                 for field in embed.fields:
                     if field.name == "Requested By":
                         requester = field.value
                         break
-                
+
                 # Method 2: Look for specific patterns in the embed description or footer
-                if not requester and hasattr(embed, "description") and embed.description:
+                if (
+                    not requester
+                    and hasattr(embed, "description")
+                    and embed.description
+                ):
                     # Try to find "Requested By" pattern in description
-                    requester_match = re.search(r"Requested By\s*\n([^\n]+)", embed.description)
+                    requester_match = re.search(
+                        r"Requested By\s*\n([^\n]+)", embed.description
+                    )
                     if requester_match:
                         requester = requester_match.group(1).strip()
-                
+
                 # Method 3: Check the footer text
                 if not requester and hasattr(embed, "footer") and embed.footer.text:
-                    requester_match = re.search(r"Requested By[:\s]+([^\n]+)", embed.footer.text)
+                    requester_match = re.search(
+                        r"Requested By[:\s]+([^\n]+)", embed.footer.text
+                    )
                     if requester_match:
                         requester = requester_match.group(1).strip()
-                
+
                 # If we found a requester, look up their Discord ID
                 if requester:
                     # Clean up any formatting from the username
-                    cleaned_requester = re.sub(r'[<>@*_~|`]', '', requester).strip()
-                    
+                    cleaned_requester = re.sub(r"[<>@*_~|`]", "", requester).strip()
+
                     discord_id = get_discord_id_for_overseerr_user(cleaned_requester)
-                    
+
                     if discord_id:
                         # Get the guild member
                         guild = message.guild
@@ -1548,12 +1652,14 @@ async def on_message(message):
                                     if channel.name == "🍿｜now-available":
                                         notification_channel = channel
                                         break
-                                
+
                                 # If channel not found, use the original channel
                                 if notification_channel is None:
                                     notification_channel = message.channel
-                                    print(f"Warning: Notification channel '🍿｜now-available' not found, using original channel")
-                                
+                                    print(
+                                        f"Warning: Notification channel '🍿｜now-available' not found, using original channel"
+                                    )
+
                                 # Send a notification
                                 notification = (
                                     f"🎉 Hey {member.mention}! **{media_title}** that you requested is now available on Plex!\n"
@@ -1567,14 +1673,17 @@ async def on_message(message):
                         except Exception as e:
                             print(f"Error notifying user: {e}")
                     else:
-                        print(f"No Discord ID found for Overseerr user: '{cleaned_requester}'")
+                        print(
+                            f"No Discord ID found for Overseerr user: '{cleaned_requester}'"
+                        )
                 else:
                     print(f"Could not extract requester from embed")
         except Exception as e:
             print(f"Error processing webhook: {e}")
-    
+
     # Continue processing commands
     await bot.process_commands(message)
+
 
 @tree.command(
     name="list_overseerr_links",
@@ -1585,45 +1694,50 @@ async def on_message(message):
 async def list_overseerr_links(interaction: discord.Interaction):
     """List all Discord to Overseerr account links"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Load existing mappings
         mappings = {}
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         if not mappings:
-            await interaction.followup.send("No Discord to Overseerr account links found.", ephemeral=True)
+            await interaction.followup.send(
+                "No Discord to Overseerr account links found.", ephemeral=True
+            )
             return
-        
+
         # Create an embed to display the links
         embed = discord.Embed(
             title="Discord to Overseerr Account Links",
             description="Below are all the current account links:",
-            color=0x00b8ff
+            color=0x00B8FF,
         )
-        
+
         for overseerr_user, discord_id in mappings.items():
             try:
                 guild = interaction.guild
                 member = await guild.fetch_member(int(discord_id))
-                member_name = member.display_name if member else f"Unknown User ({discord_id})"
+                member_name = (
+                    member.display_name if member else f"Unknown User ({discord_id})"
+                )
                 embed.add_field(
                     name=f"Overseerr: {overseerr_user}",
                     value=f"Discord: {member_name} ({discord_id})",
-                    inline=False
+                    inline=False,
                 )
             except Exception as e:
                 embed.add_field(
                     name=f"Overseerr: {overseerr_user}",
                     value=f"Discord: Unknown User ({discord_id}) - Error: {str(e)}",
-                    inline=False
+                    inline=False,
                 )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 class AccessRequestView(View):
     def __init__(self, user_id: int, channel_id: int):
@@ -3404,40 +3518,44 @@ async def send_overseerr_embed(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+
 # Function to get all users from Overseerr
 async def get_overseerr_users() -> List[Dict[str, Any]]:
     """Fetch all users from Overseerr API"""
     if not OVERSEERR_API_KEY:
         return []
-        
-    headers = {
-        "X-Api-Key": OVERSEERR_API_KEY,
-        "Content-Type": "application/json"
-    }
-    
+
+    headers = {"X-Api-Key": OVERSEERR_API_KEY, "Content-Type": "application/json"}
+
     async with aiohttp.ClientSession() as session:
         try:
             # Get the first page to determine total pages
-            async with session.get(f"{OVERSEERR_URL}/api/v1/user?take=100&skip=0", headers=headers) as response:
+            async with session.get(
+                f"{OVERSEERR_URL}/api/v1/user?take=100&skip=0", headers=headers
+            ) as response:
                 if response.status != 200:
                     print(f"Error fetching users: {response.status}")
                     return []
-                    
+
                 data = await response.json()
-                total_pages = (data.get("pageInfo", {}).get("pages", 1))
+                total_pages = data.get("pageInfo", {}).get("pages", 1)
                 all_users = data.get("results", [])
-                
+
                 # Get remaining pages if needed
                 for page in range(1, total_pages):
-                    async with session.get(f"{OVERSEERR_URL}/api/v1/user?take=100&skip={page*100}", headers=headers) as page_response:
+                    async with session.get(
+                        f"{OVERSEERR_URL}/api/v1/user?take=100&skip={page*100}",
+                        headers=headers,
+                    ) as page_response:
                         if page_response.status == 200:
                             page_data = await page_response.json()
                             all_users.extend(page_data.get("results", []))
-                
+
                 return all_users
         except Exception as e:
             print(f"Error fetching Overseerr users: {e}")
             return []
+
 
 # Function to cache the users to avoid making too many API calls
 @tasks.loop(hours=1)
@@ -3451,6 +3569,7 @@ async def cache_overseerr_users():
     except Exception as e:
         print(f"Error caching Overseerr users: {e}")
 
+
 # Function to load user mappings
 def load_user_mappings():
     """Load the Discord user to Overseerr username mappings"""
@@ -3458,17 +3577,18 @@ def load_user_mappings():
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-            
+
             # Convert to format needed by other functions (discord_id -> username)
             converted_mappings = {}
             for username, discord_id in mappings.items():
                 converted_mappings[str(discord_id)] = username
-            
+
             return converted_mappings
         return {}
     except Exception as e:
         print(f"Error loading user mappings: {e}")
         return {}
+
 
 async def is_linked_to_overseerr(discord_id: int) -> bool:
     """Check if a Discord user has linked their Overseerr account"""
@@ -3479,6 +3599,7 @@ async def is_linked_to_overseerr(discord_id: int) -> bool:
         print(f"Error checking if user is linked: {e}")
         return False
 
+
 # Helper function to get the Overseerr username for a Discord user
 def get_overseerr_username(discord_id: int) -> str:
     """Get the Overseerr username for a Discord user ID"""
@@ -3488,6 +3609,7 @@ def get_overseerr_username(discord_id: int) -> str:
     except Exception as e:
         print(f"Error retrieving Overseerr username: {e}")
         return None
+
 
 # Helper function to get the Discord user ID for an Overseerr username
 def get_discord_id_by_overseerr_username(overseerr_username: str) -> int:
@@ -3502,18 +3624,29 @@ def get_discord_id_by_overseerr_username(overseerr_username: str) -> int:
         print(f"Error retrieving Discord ID: {e}")
         return None
 
-@tree.command(name="overseerr_status", description="Check if your Discord account is linked to Overseerr")
+
+@tree.command(
+    name="overseerr_status",
+    description="Check if your Discord account is linked to Overseerr",
+)
 async def overseerr_status(interaction: discord.Interaction):
     """Check if your Discord account is linked to Overseerr"""
     await interaction.response.defer(ephemeral=True)
-    
+
     is_linked = await is_linked_to_overseerr(interaction.user.id)
-    
+
     if is_linked:
         username = get_overseerr_username(interaction.user.id)
-        await interaction.followup.send(f"✅ Your Discord account is linked to the Overseerr user: **{username}**", ephemeral=True)
+        await interaction.followup.send(
+            f"✅ Your Discord account is linked to the Overseerr user: **{username}**",
+            ephemeral=True,
+        )
     else:
-        await interaction.followup.send("❌ Your Discord account is not linked to any Overseerr account. Use `/login_overseerr` to link your account.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Your Discord account is not linked to any Overseerr account. Use `/login_overseerr` to link your account.",
+            ephemeral=True,
+        )
+
 
 @tree.command(
     name="admin_link_overseerr",
@@ -3522,14 +3655,18 @@ async def overseerr_status(interaction: discord.Interaction):
 )
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.autocomplete(overseerr_username=overseerr_username_autocomplete)
-async def admin_link_overseerr(interaction: discord.Interaction, discord_user: discord.Member, overseerr_username: str):
+async def admin_link_overseerr(
+    interaction: discord.Interaction,
+    discord_user: discord.Member,
+    overseerr_username: str,
+):
     """Allow admins to link other users' Discord accounts to Overseerr usernames"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         discord_id = discord_user.id
         success = save_user_mapping(discord_id, overseerr_username)
-        
+
         if success:
             embed = discord.Embed(
                 title="✅ Account Linked by Admin",
@@ -3538,13 +3675,17 @@ async def admin_link_overseerr(interaction: discord.Interaction, discord_user: d
                     f"They will now receive notifications when their requested content becomes available.\n\n"
                     f"Note: You can link any valid Overseerr username, even if it doesn't appear in the autocomplete list."
                 ),
-                color=0x00b8ff
+                color=0x00B8FF,
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
-            await interaction.followup.send("❌ Error saving the username mapping. Please try again.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Error saving the username mapping. Please try again.",
+                ephemeral=True,
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="admin_unlink_overseerr",
@@ -3553,43 +3694,53 @@ async def admin_link_overseerr(interaction: discord.Interaction, discord_user: d
 )
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.autocomplete(overseerr_username=overseerr_username_autocomplete)
-async def admin_unlink_overseerr(interaction: discord.Interaction, discord_user: discord.Member, overseerr_username: str):
+async def admin_unlink_overseerr(
+    interaction: discord.Interaction,
+    discord_user: discord.Member,
+    overseerr_username: str,
+):
     """Allow admins to unlink other users' Discord accounts from Overseerr usernames"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Load existing mappings
         mappings = {}
         if os.path.exists(USER_MAPPING_FILE):
             with open(USER_MAPPING_FILE, "r") as f:
                 mappings = json.load(f)
-        
+
         # Check if mapping exists
         if overseerr_username.lower() in mappings:
             # Check if the mapping belongs to the specified user
             if str(mappings[overseerr_username.lower()]) == str(discord_user.id):
                 # Remove mapping
                 del mappings[overseerr_username.lower()]
-                
+
                 # Save updated mappings
                 with open(USER_MAPPING_FILE, "w") as f:
                     json.dump(mappings, f)
-                
+
                 embed = discord.Embed(
                     title="✅ Account Unlinked by Admin",
                     description=(
                         f"Discord user **{discord_user.display_name}** has been unlinked from Overseerr username: **{overseerr_username}**\n"
                         f"They will no longer receive notifications for this account."
                     ),
-                    color=0x00b8ff
+                    color=0x00B8FF,
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send("❌ This Overseerr username is not linked to the specified Discord user.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ This Overseerr username is not linked to the specified Discord user.",
+                    ephemeral=True,
+                )
         else:
-            await interaction.followup.send("❌ No link found for this Overseerr username.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ No link found for this Overseerr username.", ephemeral=True
+            )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="admin_find_user",
@@ -3600,38 +3751,49 @@ async def admin_unlink_overseerr(interaction: discord.Interaction, discord_user:
 async def admin_find_user(interaction: discord.Interaction, search_term: str):
     """Allow admins to search for Discord users by username to help with linking/unlinking"""
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Search for users in the guild that match the search term
         guild = interaction.guild
-        matching_members = [member for member in guild.members if search_term.lower() in member.display_name.lower() or 
-                            (member.nick and search_term.lower() in member.nick.lower()) or
-                            search_term.lower() in str(member).lower()]
-        
+        matching_members = [
+            member
+            for member in guild.members
+            if search_term.lower() in member.display_name.lower()
+            or (member.nick and search_term.lower() in member.nick.lower())
+            or search_term.lower() in str(member).lower()
+        ]
+
         if not matching_members:
-            await interaction.followup.send(f"❌ No users found matching: '{search_term}'", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ No users found matching: '{search_term}'", ephemeral=True
+            )
             return
-        
+
         # Create an embed to display the matching users
         embed = discord.Embed(
             title=f"Discord Users Matching: '{search_term}'",
             description=f"Found {len(matching_members)} users. Use these IDs with admin_link_overseerr and admin_unlink_overseerr commands.",
-            color=0x00b8ff
+            color=0x00B8FF,
         )
-        
-        for member in matching_members[:20]:  # Limit to 20 results to avoid too large embeds
+
+        for member in matching_members[
+            :20
+        ]:  # Limit to 20 results to avoid too large embeds
             embed.add_field(
                 name=f"{member.display_name} ({member})",
                 value=f"ID: {member.id}",
-                inline=False
+                inline=False,
             )
-        
+
         if len(matching_members) > 20:
-            embed.set_footer(text=f"Showing 20 of {len(matching_members)} results. Please refine your search for more specific results.")
-        
+            embed.set_footer(
+                text=f"Showing 20 of {len(matching_members)} results. Please refine your search for more specific results."
+            )
+
         await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 if __name__ == "__main__":
     start_bot()
