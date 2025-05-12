@@ -186,6 +186,7 @@ def create_health_embed():
         text=f"🔄 Auto-updates every 30s • Last update: {current_time}",
         icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png",
     )
+    return embed
 
 
 @bot.event
