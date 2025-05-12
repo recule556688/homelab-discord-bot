@@ -2,6 +2,7 @@ import os
 import time
 import psutil
 import discord
+import logging
 from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -13,6 +14,18 @@ import re  # Add at the top if not already imported
 import aiohttp
 import asyncio
 from typing import List, Optional, Dict, Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],  # Log to console (stderr)
+)
+logger = logging.getLogger("discord_bot")
+logger.setLevel(logging.DEBUG)  # Set to DEBUG for more detailed logs
+
+# Log startup message
+logger.info("Bot starting up...")
 
 # Load settings from .env
 load_dotenv()
@@ -100,8 +113,8 @@ def format_uptime(uptime_seconds):
         result += f"{days}d "
     result += f"{hours}h {minutes}m {seconds}s"
 
-    print(
-        f"DEBUG: Uptime seconds={uptime_seconds}, Converted to: {days}d {hours}h {minutes}m {seconds}s"
+    logger.debug(
+        f"UPTIME CONVERSION: seconds={uptime_seconds}, formatted as: {days}d {hours}h {minutes}m {seconds}s"
     )
     return result
 
@@ -109,8 +122,17 @@ def format_uptime(uptime_seconds):
 def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
     uptime_seconds = time.time() - psutil.boot_time()
+
+    # TEST 1: Run a direct test with a known value
+    test_seconds = 1440000  # 400 hours
+    test_result = format_uptime(test_seconds)
+    logger.warning(
+        f"TEST CONVERSION: {test_seconds} seconds (400 hours) => {test_result}"
+    )
+
+    # TEST 2: Check the actual uptime
     uptime_str = format_uptime(uptime_seconds)
-    print(f"DEBUG UPTIME FOR EMBED: {uptime_seconds}, Formatted as: {uptime_str}")
+    logger.warning(f"ACTUAL UPTIME: {uptime_seconds} seconds => {uptime_str}")
 
     # Gather CPU and RAM usage using psutil
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -139,6 +161,21 @@ def create_health_embed():
     # Extract days part to highlight it (if it exists)
     days_part = ""
     hours_part = uptime_str
+
+    # FORCE DAYS DISPLAY FOR TESTING - directly calculate days
+    days = int(uptime_seconds // 86400)
+    hours = int((uptime_seconds % 86400) // 3600)
+    minutes = int((uptime_seconds % 3600) // 60)
+    seconds = int(uptime_seconds % 60)
+
+    forced_uptime = f"{days}d {hours}h {minutes}m {seconds}s"
+    logger.warning(f"FORCED UPTIME FORMAT: {forced_uptime}")
+
+    # Use the forced format for display
+    if days > 0:
+        days_part = f"{days}d "
+        hours_part = f"{hours}h {minutes}m {seconds}s"
+
     if "d " in uptime_str:
         parts = uptime_str.split("d ", 1)
         days_part = parts[0] + "d "
@@ -151,12 +188,13 @@ def create_health_embed():
         f"┌──────────────────────────┐\n"
     )
 
-    if days_part:
-        system_stats += (
-            f"│ Uptime: \u001b[1;31m{days_part}\u001b[1;33m{hours_part}\u001b[0m\n"
-        )
+    # OVERRIDE: Always use the forced uptime format with days for display
+    if days > 0:
+        system_stats += f"│ Uptime: \u001b[1;31m{days}d \u001b[1;33m{hours}h {minutes}m {seconds}s\u001b[0m\n"
     else:
-        system_stats += f"│ Uptime: \u001b[1;33m{uptime_str}\u001b[0m\n"
+        system_stats += (
+            f"│ Uptime: \u001b[1;33m{hours}h {minutes}m {seconds}s\u001b[0m\n"
+        )
 
     system_stats += f"└──────────────────────────┘\n" f"```"
     embed.add_field(name="", value=system_stats, inline=False)
