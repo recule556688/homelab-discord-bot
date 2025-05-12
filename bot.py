@@ -88,30 +88,30 @@ def load_dashboard_state():
 
 def format_uptime(uptime_seconds):
     """Format uptime into a human-readable string with appropriate units"""
-    years, remainder = divmod(uptime_seconds, 31536000)  # 365 days
-    months, remainder = divmod(remainder, 2592000)  # 30 days
-    weeks, remainder = divmod(remainder, 604800)  # 7 days
-    days, remainder = divmod(remainder, 86400)  # 24 hours
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    # First, let's directly convert total seconds to more readable units
+    # Convert hours first
+    total_hours = uptime_seconds / 3600
 
-    parts = []
-    if years > 0:
-        parts.append(f"{int(years)}y")
-    if months > 0:
-        parts.append(f"{int(months)}mo")
-    if weeks > 0:
-        parts.append(f"{int(weeks)}w")
-    if days > 0:
-        parts.append(f"{int(days)}d")
-    if hours > 0 or len(parts) == 0:  # Always show hours if no larger units
-        parts.append(f"{int(hours)}h")
-    if minutes > 0 or len(parts) == 0:  # Always show minutes if no larger units
-        parts.append(f"{int(minutes)}m")
-    if seconds > 0 or len(parts) == 0:  # Always show seconds if no larger units
-        parts.append(f"{int(seconds)}s")
+    # If we have more than 24 hours, convert to days explicitly
+    if total_hours >= 24:
+        days = int(total_hours // 24)
+        hours = int(total_hours % 24)
+        minutes = int((uptime_seconds % 3600) // 60)
+        seconds = int(uptime_seconds % 60)
 
-    return " ".join(parts)
+        # Further convert to weeks if we have enough days
+        if days >= 7:
+            weeks = days // 7
+            days = days % 7
+            return f"{int(weeks)}w {int(days)}d {hours}h {minutes}m {seconds}s"
+        else:
+            return f"{days}d {hours}h {minutes}m {seconds}s"
+    else:
+        # Less than 24 hours, use original calculation
+        hours = int(total_hours)
+        minutes = int((uptime_seconds % 3600) // 60)
+        seconds = int(uptime_seconds % 60)
+        return f"{hours}h {minutes}m {seconds}s"
 
 
 def create_health_embed():
