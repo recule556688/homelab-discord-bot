@@ -27,10 +27,15 @@ dashboard_message = None
 dashboard_channel = None
 
 # File to store dashboard state
-DASHBOARD_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard_state.json")
+DASHBOARD_STATE_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data", "dashboard_state.json"
+)
 
 # Add a constant for the counter state file
-COUNTER_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "counter_state.json")
+COUNTER_STATE_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data", "counter_state.json"
+)
+
 
 def get_plex_connection():
     """Create a connection to Plex server"""
@@ -40,19 +45,18 @@ def get_plex_connection():
         print(f"Error connecting to Plex: {e}")
         return None
 
+
 def save_dashboard_state(channel_id, message_id):
     """Save the dashboard state to a file"""
     try:
-        state = {
-            "channel_id": channel_id,
-            "message_id": message_id
-        }
+        state = {"channel_id": channel_id, "message_id": message_id}
         # Ensure the data directory exists
         os.makedirs(os.path.dirname(DASHBOARD_STATE_FILE), exist_ok=True)
         with open(DASHBOARD_STATE_FILE, "w") as f:
             json.dump(state, f)
     except Exception as e:
         print(f"Error saving dashboard state: {e}")
+
 
 def load_dashboard_state():
     """Load the dashboard state from file"""
@@ -64,12 +68,39 @@ def load_dashboard_state():
         print(f"Error loading dashboard state: {e}")
     return None
 
+
+def format_uptime(uptime_seconds):
+    """Format uptime into a human-readable string with appropriate units"""
+    years, remainder = divmod(uptime_seconds, 31536000)  # 365 days
+    months, remainder = divmod(remainder, 2592000)  # 30 days
+    weeks, remainder = divmod(remainder, 604800)  # 7 days
+    days, remainder = divmod(remainder, 86400)  # 24 hours
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    parts = []
+    if years > 0:
+        parts.append(f"{int(years)}y")
+    if months > 0:
+        parts.append(f"{int(months)}mo")
+    if weeks > 0:
+        parts.append(f"{int(weeks)}w")
+    if days > 0:
+        parts.append(f"{int(days)}d")
+    if hours > 0 or len(parts) == 0:  # Always show hours if no larger units
+        parts.append(f"{int(hours)}h")
+    if minutes > 0 or len(parts) == 0:  # Always show minutes if no larger units
+        parts.append(f"{int(minutes)}m")
+    if seconds > 0 or len(parts) == 0:  # Always show seconds if no larger units
+        parts.append(f"{int(seconds)}s")
+
+    return " ".join(parts)
+
+
 def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
     uptime_seconds = time.time() - psutil.boot_time()
-    hours, remainder = divmod(uptime_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+    uptime_str = format_uptime(uptime_seconds)
 
     # Gather CPU and RAM usage using psutil
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -86,17 +117,13 @@ def create_health_embed():
         net_bytes_recv = 0
 
     # Build the embed with modern styling
-    embed = discord.Embed(
-        title="",
-        description="",
-        color=0x00b8ff  # Plex blue color
-    )
+    embed = discord.Embed(title="", description="", color=0x00B8FF)  # Plex blue color
 
     # Title
     embed.add_field(
         name="\n💻 LIVE SYSTEM DASHBOARD 📊",
         value="━━━━━━━━━━━━━━━━━━━━━━━━",
-        inline=False
+        inline=False,
     )
 
     # System Overview
@@ -139,35 +166,9 @@ def create_health_embed():
     current_time = time.strftime("%Y-%m-%d %H:%M:%S")
     embed.set_footer(
         text=f"🔄 Auto-updates every 30s • Last update: {current_time}",
-        icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
+        icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png",
     )
 
-    # Add Uptime Kuma monitors if available
-    kuma_data = get_kuma_monitors()
-    if kuma_data and 'heartbeatList' in kuma_data:
-        monitors = kuma_data.get('heartbeatList', [])
-        if monitors:
-            # Create a formatted string with monitor statuses
-            kuma_stats = (
-                f"```ansi\n"
-                f"\u001b[1;33mUPTIME MONITORS\u001b[0m\n"
-                f"┌──────────────────────────┐\n"
-            )
-            
-            for monitor in monitors:
-                name = monitor.get('name', 'Unknown')
-                status = monitor.get('status', 0)
-                status_color = "32" if status == 1 else "31"  # Green if up, red if down
-                status_text = "UP" if status == 1 else "DOWN"
-                kuma_stats += f"│ {name}: \u001b[1;{status_color}m{status_text}\u001b[0m\n"
-                
-            kuma_stats += (
-                f"└──────────────────────────┘\n"
-                f"```"
-            )
-            embed.add_field(name="", value=kuma_stats, inline=False)
-
-    return embed
 
 @bot.event
 async def on_ready():
@@ -177,9 +178,8 @@ async def on_ready():
         await bot.change_presence(
             status=discord.Status.dnd,
             activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                name="You and all your hardware 😏"
-            )
+                type=discord.ActivityType.watching, name="You and all your hardware 😏"
+            ),
         )
         # Get the test guild
         guild = discord.Object(id=TEST_GUILD_ID)
@@ -206,26 +206,32 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Sync failed: {e}")
 
+
 @bot.event
 async def on_member_join(member):
     try:
         # Use the specific Newbie role ID
         NEWBIE_ROLE_ID = 1362860764091908367
         newbie_role = member.guild.get_role(NEWBIE_ROLE_ID)
-        
+
         if newbie_role:
             await member.add_roles(newbie_role)
             print(f"✅ Added Newbie role to {member.name}")
-            
+
             # Optional: Send a welcome message
-            welcome_channel = discord.utils.get(member.guild.channels, name="📖｜start-here")
+            welcome_channel = discord.utils.get(
+                member.guild.channels, name="📖｜start-here"
+            )
             if welcome_channel:
-                await welcome_channel.send(f"Welcome {member.mention}! You've been assigned the {newbie_role.name} role.")
+                await welcome_channel.send(
+                    f"Welcome {member.mention}! You've been assigned the {newbie_role.name} role."
+                )
         else:
             print(f"❌ Could not find Newbie role with ID {NEWBIE_ROLE_ID}")
-            
+
     except Exception as e:
         print(f"❌ Error assigning Newbie role to {member.name}: {e}")
+
 
 # Define which commands should be restricted to admins
 ADMIN_COMMANDS = [
@@ -235,80 +241,81 @@ ADMIN_COMMANDS = [
     "fix_thread_permissions",
     "fix_access_channel",
     "send_intro_embed",
-    "send_invite_embed"
+    "send_invite_embed",
 ]
+
 
 # When setting up commands, set default permissions
 async def setup_commands():
     """Set up all slash commands"""
     guild = discord.Object(id=TEST_GUILD_ID)
-    
+
     # Commands list
     commands = [
         app_commands.Command(
             name="setup_homelab",
             description="Set up the homelab server layout with roles and channels.",
             callback=setup_homelab,
-            default_permissions=discord.Permissions(administrator=True)  # Only visible to admins
+            default_permissions=discord.Permissions(
+                administrator=True
+            ),  # Only visible to admins
         ),
         app_commands.Command(
             name="dashboard",
             description="Start a persistent server health dashboard.",
-            callback=dashboard
+            callback=dashboard,
         ),
         app_commands.Command(
             name="sync",
             description="Sync slash commands (Admin only)",
             callback=sync,
-            default_permissions=discord.Permissions(administrator=True)
+            default_permissions=discord.Permissions(administrator=True),
         ),
         app_commands.Command(
             name="fix_permissions",
             description="Fix permissions for all roles and channels",
             callback=fix_permissions,
-            default_permissions=discord.Permissions(administrator=True)
+            default_permissions=discord.Permissions(administrator=True),
         ),
         app_commands.Command(
             name="send_intro_embed",
             description="Send the onboarding embed to the start-here channel.",
             callback=send_intro_embed,
-            default_permissions=discord.Permissions(administrator=True)
+            default_permissions=discord.Permissions(administrator=True),
         ),
         app_commands.Command(
             name="send_invite_embed",
             description="Send the get-invite embed to the channel.",
             callback=send_invite_embed,
-            default_permissions=discord.Permissions(administrator=True)
+            default_permissions=discord.Permissions(administrator=True),
         ),
         # Normal user commands
         app_commands.Command(
             name="serverhealth",
             description="Check current server health stats.",
-            callback=server_health
+            callback=server_health,
         ),
         app_commands.Command(
-            name="ping",
-            description="Check the bot's latency.",
-            callback=ping
+            name="ping", description="Check the bot's latency.", callback=ping
         ),
         app_commands.Command(
             name="commands",
             description="List all available commands",
-            callback=list_commands
+            callback=list_commands,
         ),
         app_commands.Command(
             name="media_stats",
             description="Show statistics for Movies, TV Shows, Anime Shows, and Anime Movies",
-            callback=media_stats
+            callback=media_stats,
         ),
         app_commands.Command(
             name="restrict_channels",
             description="Strictly restrict channel visibility for new users",
             callback=restrict_channels,
-            default_permissions=discord.Permissions(administrator=True)
+            default_permissions=discord.Permissions(administrator=True),
         ),
     ]
-    
+
     # Add each command to the tree
     for cmd in commands:
         tree.add_command(cmd, guild=guild)
@@ -321,7 +328,7 @@ async def setup_commands():
 )
 async def dashboard(interaction: discord.Interaction):
     await interaction.response.defer()
-    
+
     try:
         global dashboard_message, dashboard_channel
 
@@ -335,7 +342,7 @@ async def dashboard(interaction: discord.Interaction):
                     await old_message.delete()
                 except:
                     pass  # Ignore if message doesn't exist or can't be deleted
-                
+
                 # Clean up the state file
                 if os.path.exists(DASHBOARD_STATE_FILE):
                     os.remove(DASHBOARD_STATE_FILE)
@@ -346,8 +353,8 @@ async def dashboard(interaction: discord.Interaction):
 
         # Send an ephemeral message so the user knows the dashboard is starting
         await interaction.followup.send(
-            "🚀 Starting system dashboard... (This message will disappear)", 
-            ephemeral=True
+            "🚀 Starting system dashboard... (This message will disappear)",
+            ephemeral=True,
         )
 
         # Post the first dashboard embed publicly
@@ -365,7 +372,7 @@ async def dashboard(interaction: discord.Interaction):
         error_embed = discord.Embed(
             title="❌ Error",
             description=f"Failed to start dashboard:\n```ansi\n\u001b[1;31m{str(e)}\u001b[0m```",
-            color=0xff0000
+            color=0xFF0000,
         )
         await interaction.followup.send(embed=error_embed, ephemeral=True)
 
@@ -397,13 +404,11 @@ async def update_dashboard():
 )
 async def server_health(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # System uptime
         uptime_seconds = time.time() - psutil.boot_time()
-        hours, remainder = divmod(uptime_seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+        uptime_str = format_uptime(uptime_seconds)
 
         # CPU information
         cpu_usage = psutil.cpu_percent(interval=1)
@@ -437,17 +442,13 @@ async def server_health(interaction: discord.Interaction):
             net_connections = "N/A"
 
         # Build the embed with a modern layout
-        embed = discord.Embed(
-            title="",
-            description="",
-            color=0x00b8ff
-        )
+        embed = discord.Embed(title="", description="", color=0x00B8FF)
 
         # Modern title with emoji
         embed.add_field(
             name="\n💻 SYSTEM HEALTH DASHBOARD 📊",
             value="━━━━━━━━━━━━━━━━━━━━━━━━",
-            inline=False
+            inline=False,
         )
 
         # System Stats
@@ -494,7 +495,7 @@ async def server_health(interaction: discord.Interaction):
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
         embed.set_footer(
             text=f"📊 Stats as of {current_time} • Use /serverhealth to refresh",
-            icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png"
+            icon_url="https://cdn.iconscout.com/icon/free/png-256/refresh-1781197-1518571.png",
         )
 
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -503,7 +504,7 @@ async def server_health(interaction: discord.Interaction):
         error_embed = discord.Embed(
             title="❌ Error",
             description=f"Failed to fetch server health:\n```ansi\n\u001b[1;31m{str(e)}\u001b[0m```",
-            color=0xff0000
+            color=0xFF0000,
         )
         await interaction.followup.send(embed=error_embed, ephemeral=True)
 
@@ -623,7 +624,9 @@ async def setup_homelab(interaction: discord.Interaction):
             if not existing_channel:
                 # Set up channel permissions based on category
                 overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    guild.default_role: discord.PermissionOverwrite(
+                        read_messages=False
+                    ),
                     guild.me: discord.PermissionOverwrite(
                         # Basic permissions
                         view_channel=True,
@@ -643,27 +646,41 @@ async def setup_homelab(interaction: discord.Interaction):
                         manage_roles=True,
                     ),
                 }
-                
+
                 # Special permissions for onboarding channels
                 if category_name == "👋 Onboarding":
                     if channel_name == "📖｜start-here":
                         # Everyone can read start-here
-                        overwrites[guild.default_role] = discord.PermissionOverwrite(read_messages=True)
+                        overwrites[guild.default_role] = discord.PermissionOverwrite(
+                            read_messages=True
+                        )
                     elif channel_name == "📬｜get-invite":
                         # Only approved users can see get-invite
-                        approved_role = discord.utils.get(guild.roles, name="🎟️ Approved")
+                        approved_role = discord.utils.get(
+                            guild.roles, name="🎟️ Approved"
+                        )
                         if approved_role:
-                            overwrites[approved_role] = discord.PermissionOverwrite(read_messages=True)
+                            overwrites[approved_role] = discord.PermissionOverwrite(
+                                read_messages=True
+                            )
                     elif channel_name == "🎫｜access-requests":
                         # Only mods and admins can see access requests
                         admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
-                        maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
+                        maintainer_role = discord.utils.get(
+                            guild.roles, name="🔧 Maintainer"
+                        )
                         if admin_role:
-                            overwrites[admin_role] = discord.PermissionOverwrite(read_messages=True)
+                            overwrites[admin_role] = discord.PermissionOverwrite(
+                                read_messages=True
+                            )
                         if maintainer_role:
-                            overwrites[maintainer_role] = discord.PermissionOverwrite(read_messages=True)
+                            overwrites[maintainer_role] = discord.PermissionOverwrite(
+                                read_messages=True
+                            )
 
-                await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
+                await guild.create_text_channel(
+                    channel_name, category=category, overwrites=overwrites
+                )
                 print(f"Created channel: {channel_name}")
 
     await interaction.followup.send("🎉 Server structure created/updated successfully!")
@@ -684,12 +701,11 @@ async def sync(interaction: discord.Interaction):
         synced = await tree.sync(guild=guild)
         await interaction.followup.send(
             f"✅ Successfully synced {len(synced)} commands to guild {TEST_GUILD_ID}",
-            ephemeral=True
+            ephemeral=True,
         )
     except Exception as e:
         await interaction.followup.send(
-            f"❌ Failed to sync commands: {e}",
-            ephemeral=True
+            f"❌ Failed to sync commands: {e}", ephemeral=True
         )
 
 
@@ -706,7 +722,7 @@ async def list_commands(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🤖 Available Commands",
         description="\n".join(commands_list),
-        color=0x00FF00
+        color=0x00FF00,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -718,10 +734,13 @@ async def list_commands(interaction: discord.Interaction):
 )
 async def media_stats(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     plex = get_plex_connection()
     if not plex:
-        await interaction.followup.send("❌ Could not connect to Plex server. Please check your configuration.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Could not connect to Plex server. Please check your configuration.",
+            ephemeral=True,
+        )
         return
 
     try:
@@ -729,21 +748,21 @@ async def media_stats(interaction: discord.Interaction):
         embed = discord.Embed(
             title="📊 Media Library Statistics",
             description="Statistics from your Plex Libraries",
-            color=0x1f2033  # Dark blue background
+            color=0x1F2033,  # Dark blue background
         )
 
         # Define specific libraries to process
         library_names = ["Movies", "TV Shows", "Anime Shows", "Anime Movies"]
         library_stats = {}
         recent_items = []
-        
+
         # Track overall totals
         total_items = 0
         total_size_gb = 0
         total_duration_minutes = 0
         total_episodes = 0
         recent_date = datetime.now() - timedelta(days=7)
-        
+
         # Process each specific library
         for library_name in library_names:
             try:
@@ -751,33 +770,39 @@ async def media_stats(interaction: discord.Interaction):
                 library_items = library.all()
                 item_count = len(library_items)
                 total_items += item_count
-                
+
                 # Calculate size and duration
                 library_size_gb = 0
                 duration_minutes = 0
                 recent_count = 0
                 episode_count = 0
-                
+
                 # Process based on whether it's movies or shows
                 if "movie" in library_name.lower():
                     # Movie libraries
                     for movie in library_items:
                         # Size
-                        if hasattr(movie, 'media') and movie.media:
-                            library_size_gb += movie.media[0].parts[0].size / (1024**3)  # Convert to GB
+                        if hasattr(movie, "media") and movie.media:
+                            library_size_gb += movie.media[0].parts[0].size / (
+                                1024**3
+                            )  # Convert to GB
                         # Duration
-                        if hasattr(movie, 'duration'):
-                            duration_minutes += movie.duration / 60000  # Convert ms to minutes
+                        if hasattr(movie, "duration"):
+                            duration_minutes += (
+                                movie.duration / 60000
+                            )  # Convert ms to minutes
                         # Recent items
-                        if hasattr(movie, 'addedAt') and movie.addedAt >= recent_date:
+                        if hasattr(movie, "addedAt") and movie.addedAt >= recent_date:
                             recent_count += 1
-                            recent_items.append((movie.title, library_name, movie.year, movie.addedAt))
-                            
+                            recent_items.append(
+                                (movie.title, library_name, movie.year, movie.addedAt)
+                            )
+
                     # Calculate days, hours, minutes
                     days = int(duration_minutes // 1440)
                     hours = int((duration_minutes % 1440) // 60)
                     minutes = int(duration_minutes % 60)
-                    
+
                     # Add to library stats
                     library_stats[library_name] = {
                         "count": item_count,
@@ -785,9 +810,9 @@ async def media_stats(interaction: discord.Interaction):
                         "duration": f"{days}d {hours}h {minutes}m",
                         "duration_minutes": duration_minutes,
                         "recent_count": recent_count,
-                        "type": "movie"
+                        "type": "movie",
                     }
-                    
+
                 elif "show" in library_name.lower():
                     # TV Shows libraries
                     for show in library_items:
@@ -796,21 +821,27 @@ async def media_stats(interaction: discord.Interaction):
                         episode_count += len(episodes)
                         for episode in episodes:
                             # Size
-                            if hasattr(episode, 'media') and episode.media:
-                                library_size_gb += episode.media[0].parts[0].size / (1024**3)  # Convert to GB
+                            if hasattr(episode, "media") and episode.media:
+                                library_size_gb += episode.media[0].parts[0].size / (
+                                    1024**3
+                                )  # Convert to GB
                             # Duration
-                            if hasattr(episode, 'duration'):
-                                duration_minutes += episode.duration / 60000  # Convert ms to minutes
+                            if hasattr(episode, "duration"):
+                                duration_minutes += (
+                                    episode.duration / 60000
+                                )  # Convert ms to minutes
                         # Recent items
-                        if hasattr(show, 'addedAt') and show.addedAt >= recent_date:
+                        if hasattr(show, "addedAt") and show.addedAt >= recent_date:
                             recent_count += 1
-                            recent_items.append((show.title, library_name, len(episodes), show.addedAt))
-                    
+                            recent_items.append(
+                                (show.title, library_name, len(episodes), show.addedAt)
+                            )
+
                     # Calculate days, hours, minutes
                     days = int(duration_minutes // 1440)
                     hours = int((duration_minutes % 1440) // 60)
                     minutes = int(duration_minutes % 60)
-                    
+
                     # Add to library stats
                     library_stats[library_name] = {
                         "count": item_count,
@@ -819,27 +850,27 @@ async def media_stats(interaction: discord.Interaction):
                         "duration": f"{days}d {hours}h {minutes}m",
                         "duration_minutes": duration_minutes,
                         "recent_count": recent_count,
-                        "type": "show"
+                        "type": "show",
                     }
-                
+
                 # Add to totals
                 total_size_gb += library_size_gb
                 total_duration_minutes += duration_minutes
                 total_episodes += episode_count
-                
+
             except Exception as e:
                 # If processing a library fails, record the error
                 embed.add_field(
                     name=f"❌ Error processing {library_name}",
                     value=f"Error: {str(e)}",
-                    inline=False
+                    inline=False,
                 )
-        
+
         # Calculate total duration
         total_days = int(total_duration_minutes // 1440)
         total_hours = int((total_duration_minutes % 1440) // 60)
         total_minutes = int(total_duration_minutes % 60)
-        
+
         # Add total stats with ansi colors
         total_stats = (
             f"```ansi\n"
@@ -851,7 +882,7 @@ async def media_stats(interaction: discord.Interaction):
             f"```"
         )
         embed.add_field(name="", value=total_stats, inline=False)
-        
+
         # Add library-specific stats with ansi colors
         for name, stats in library_stats.items():
             if stats["type"] == "movie":
@@ -863,7 +894,7 @@ async def media_stats(interaction: discord.Interaction):
                     emoji = "🇯🇵"
                     display_name = "ANIME MOVIES"
                     color = "35;1"  # Bright purple
-                
+
                 lib_stats = (
                     f"```ansi\n"
                     f"\u001b[1;{color}m{emoji} {display_name}\u001b[0m\n\n"
@@ -886,7 +917,7 @@ async def media_stats(interaction: discord.Interaction):
                     emoji = "🇯🇵"
                     display_name = "ANIME SHOWS"
                     color = "36;1"  # Bright cyan
-                
+
                 lib_stats = (
                     f"```ansi\n"
                     f"\u001b[1;{color}m{emoji} {display_name}\u001b[0m\n\n"
@@ -901,26 +932,28 @@ async def media_stats(interaction: discord.Interaction):
                     f"└───────────────\n"
                     f"```"
                 )
-            
+
             embed.add_field(name="", value=lib_stats, inline=True)
-            
+
         # Add divider
         embed.add_field(name="", value="───────────────────────", inline=False)
-        
+
         # Sort recent items by date and display top ones with ansi colors
         if recent_items:
             recent_items.sort(key=lambda x: x[3], reverse=True)
             recent_content = "```ansi\n\u001b[1;35mRECENT ADDITIONS\u001b[0m\n"
-            
+
             for i, (title, lib_type, year_or_eps, _) in enumerate(recent_items[:6]):
                 if "movie" in lib_type.lower():
-                    recent_content += f"• \u001b[1;36m{title}\u001b[0m - {lib_type} ({year_or_eps})\n"
+                    recent_content += (
+                        f"• \u001b[1;36m{title}\u001b[0m - {lib_type} ({year_or_eps})\n"
+                    )
                 else:
                     recent_content += f"• \u001b[1;36m{title}\u001b[0m - {lib_type} ({year_or_eps} eps)\n"
-            
+
             recent_content += "```"
             embed.add_field(name="", value=recent_content, inline=False)
-        
+
         # Modern footer with timestamp
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
         embed.set_footer(
@@ -928,15 +961,17 @@ async def media_stats(interaction: discord.Interaction):
         )
 
         # Add Plex logo
-        embed.set_thumbnail(url="https://cdn.iconscout.com/icon/free/png-256/plex-3521495-2944935.png")
-        
+        embed.set_thumbnail(
+            url="https://cdn.iconscout.com/icon/free/png-256/plex-3521495-2944935.png"
+        )
+
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     except Exception as e:
         error_embed = discord.Embed(
             title="❌ Error",
             description=f"Failed to fetch media statistics:\n```{str(e)}```",
-            color=0xff0000
+            color=0xFF0000,
         )
         await interaction.followup.send(embed=error_embed, ephemeral=True)
 
@@ -944,38 +979,57 @@ async def media_stats(interaction: discord.Interaction):
 class OnboardingView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(Button(label="🎟 Request Access", style=discord.ButtonStyle.primary, custom_id="request_access"))
+        self.add_item(
+            Button(
+                label="🎟 Request Access",
+                style=discord.ButtonStyle.primary,
+                custom_id="request_access",
+            )
+        )
+
 
 class ChannelManagementView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        
-    @discord.ui.button(label="🗑️ Delete Channel", style=discord.ButtonStyle.secondary, custom_id="delete_channel")
-    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    @discord.ui.button(
+        label="🗑️ Delete Channel",
+        style=discord.ButtonStyle.secondary,
+        custom_id="delete_channel",
+    )
+    async def delete_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Check if the user has permission (Admin or Maintainer role)
         has_permission = False
         admin_role = discord.utils.get(interaction.guild.roles, name="🛡️ Admin")
-        maintainer_role = discord.utils.get(interaction.guild.roles, name="🔧 Maintainer")
-        
-        if (admin_role and admin_role in interaction.user.roles) or \
-           (maintainer_role and maintainer_role in interaction.user.roles):
+        maintainer_role = discord.utils.get(
+            interaction.guild.roles, name="🔧 Maintainer"
+        )
+
+        if (admin_role and admin_role in interaction.user.roles) or (
+            maintainer_role and maintainer_role in interaction.user.roles
+        ):
             has_permission = True
-            
+
         if not has_permission:
             await interaction.response.send_message(
-                "❌ 🇺🇸 You don't have permission to delete this channel. Only Admins and Maintainers can do this.\n\n" +
-                "🇫🇷 Vous n'avez pas la permission de supprimer ce canal. Seuls les Admins et les Mainteneurs peuvent le faire.",
-                ephemeral=True
+                "❌ 🇺🇸 You don't have permission to delete this channel. Only Admins and Maintainers can do this.\n\n"
+                + "🇫🇷 Vous n'avez pas la permission de supprimer ce canal. Seuls les Admins et les Mainteneurs peuvent le faire.",
+                ephemeral=True,
             )
             return
-        
+
         # Delete the channel
         try:
             await interaction.response.defer(ephemeral=True)
             channel = interaction.channel
             await channel.delete()
         except Exception as e:
-            await interaction.followup.send(f"❌ Error deleting channel: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ Error deleting channel: {str(e)}", ephemeral=True
+            )
+
 
 class AccessRequestView(View):
     def __init__(self, user_id: int, channel_id: int):
@@ -983,80 +1037,98 @@ class AccessRequestView(View):
         self.user_id = user_id
         self.channel_id = channel_id
 
-    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success, custom_id="approve_request")
-    async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="✅ Approve",
+        style=discord.ButtonStyle.success,
+        custom_id="approve_request",
+    )
+    async def approve_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Check if the user has permission to approve (Admin or Maintainer role)
         has_permission = False
         admin_role = discord.utils.get(interaction.guild.roles, name="🛡️ Admin")
-        maintainer_role = discord.utils.get(interaction.guild.roles, name="🔧 Maintainer")
-        
-        if (admin_role and admin_role in interaction.user.roles) or \
-           (maintainer_role and maintainer_role in interaction.user.roles):
+        maintainer_role = discord.utils.get(
+            interaction.guild.roles, name="🔧 Maintainer"
+        )
+
+        if (admin_role and admin_role in interaction.user.roles) or (
+            maintainer_role and maintainer_role in interaction.user.roles
+        ):
             has_permission = True
-            
+
         if not has_permission:
             # Acknowledge the interaction first to prevent timeout
             try:
                 await interaction.response.send_message(
-                    "❌ 🇺🇸 You don't have permission to approve requests. Only Admins and Maintainers can do this.\n\n" +
-                    "🇫🇷 Vous n'avez pas la permission d'approuver les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
-                    ephemeral=True
+                    "❌ 🇺🇸 You don't have permission to approve requests. Only Admins and Maintainers can do this.\n\n"
+                    + "🇫🇷 Vous n'avez pas la permission d'approuver les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
+                    ephemeral=True,
                 )
             except discord.errors.NotFound:
                 # Interaction already expired
                 return
             return
-        
+
         try:
             # Get the channel
             channel = interaction.channel
-            
+
             # Try to extract request number from channel name
             request_number = "Unknown"
             try:
                 # Channel name format: request-XXXX-username
-                channel_name_parts = channel.name.split('-')
+                channel_name_parts = channel.name.split("-")
                 if len(channel_name_parts) >= 2:
                     request_number = channel_name_parts[1]
             except:
                 pass
-            
+
             # Acknowledge the interaction first - wrap in try/except
             try:
                 await interaction.response.defer()
             except discord.errors.NotFound:
                 # If interaction already expired, we can't continue
                 return
-            
+
             try:
                 user = await interaction.guild.fetch_member(self.user_id)
                 if not user:
-                    await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                    await interaction.followup.send(
+                        "❌ Error: Could not find the user who requested access.",
+                        ephemeral=True,
+                    )
                     return
-                    
+
                 # Remove Pending role
-                pending_role = discord.utils.get(interaction.guild.roles, name="⏳ Pending")
+                pending_role = discord.utils.get(
+                    interaction.guild.roles, name="⏳ Pending"
+                )
                 if pending_role and pending_role in user.roles:
                     await user.remove_roles(pending_role)
-                
+
                 # Remove Denied role if they had it
-                denied_role = discord.utils.get(interaction.guild.roles, name="❌ Denied")
+                denied_role = discord.utils.get(
+                    interaction.guild.roles, name="❌ Denied"
+                )
                 if denied_role and denied_role in user.roles:
                     await user.remove_roles(denied_role)
-                
+
                 # Add Approved role
-                approved_role = discord.utils.get(interaction.guild.roles, name="🎟️ Approved")
+                approved_role = discord.utils.get(
+                    interaction.guild.roles, name="🎟️ Approved"
+                )
                 if approved_role:
                     await user.add_roles(approved_role)
-                    
+
                     # Send approval message in channel with request number
                     embed = discord.Embed(
                         title=f"✅ Request #{request_number} Approved | Demande #{request_number} Approuvée",
-                        description=f"🇺🇸 {user.mention} has been approved for access!\n\n" +
-                                    f"They can now access the invite channel.\n\n" +
-                                    f"🇫🇷 {user.mention} a été approuvé pour l'accès !\n\n" +
-                                    f"Ils peuvent maintenant accéder au canal d'invitation.",
-                        color=0x00ff00
+                        description=f"🇺🇸 {user.mention} has been approved for access!\n\n"
+                        + f"They can now access the invite channel.\n\n"
+                        + f"🇫🇷 {user.mention} a été approuvé pour l'accès !\n\n"
+                        + f"Ils peuvent maintenant accéder au canal d'invitation.",
+                        color=0x00FF00,
                     )
                     await interaction.followup.send(embed=embed)
 
@@ -1064,53 +1136,71 @@ class AccessRequestView(View):
                     try:
                         dm_embed = discord.Embed(
                             title=f"🎉 Access Request #{request_number} Approved! | Demande d'Accès #{request_number} Approuvée !",
-                            description="🇺🇸 Your access request has been approved! You can now access the invite channel.\n\n" +
-                                        "🇫🇷 Votre demande d'accès a été approuvée ! Vous pouvez maintenant accéder au canal d'invitation.",
-                            color=0x00ff00
+                            description="🇺🇸 Your access request has been approved! You can now access the invite channel.\n\n"
+                            + "🇫🇷 Votre demande d'accès a été approuvée ! Vous pouvez maintenant accéder au canal d'invitation.",
+                            color=0x00FF00,
                         )
                         await user.send(embed=dm_embed)
                     except:
                         # If DM fails, add a note to the channel
-                        await channel.send("Note: Could not send DM to user (they may have DMs disabled)")
+                        await channel.send(
+                            "Note: Could not send DM to user (they may have DMs disabled)"
+                        )
 
                     # Add a message about channel deletion
                     await channel.send(
-                        f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n" +
-                        f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
-                        delete_after=300  # Delete after 5 minutes
+                        f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n"
+                        + f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
+                        delete_after=300,  # Delete after 5 minutes
                     )
                 else:
-                    await interaction.followup.send("❌ Error: Could not find the Approved role.", ephemeral=True)
+                    await interaction.followup.send(
+                        "❌ Error: Could not find the Approved role.", ephemeral=True
+                    )
             except discord.NotFound:
-                await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ Error: Could not find the user who requested access.",
+                    ephemeral=True,
+                )
             except Exception as e:
-                await interaction.followup.send(f"❌ Error while approving: {str(e)}", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Error while approving: {str(e)}", ephemeral=True
+                )
 
         except Exception as e:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ Error: {str(e)}", ephemeral=True
+                )
             else:
                 await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
-    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="deny_request")
-    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="deny_request"
+    )
+    async def deny_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Check if the user has permission to deny (Admin or Maintainer role)
         has_permission = False
         admin_role = discord.utils.get(interaction.guild.roles, name="🛡️ Admin")
-        maintainer_role = discord.utils.get(interaction.guild.roles, name="🔧 Maintainer")
-        
-        if (admin_role and admin_role in interaction.user.roles) or \
-           (maintainer_role and maintainer_role in interaction.user.roles):
+        maintainer_role = discord.utils.get(
+            interaction.guild.roles, name="🔧 Maintainer"
+        )
+
+        if (admin_role and admin_role in interaction.user.roles) or (
+            maintainer_role and maintainer_role in interaction.user.roles
+        ):
             has_permission = True
-            
+
         if not has_permission:
             await interaction.response.send_message(
-                "❌ 🇺🇸 You don't have permission to deny requests. Only Admins and Maintainers can do this.\n\n" +
-                "🇫🇷 Vous n'avez pas la permission de refuser les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
-                ephemeral=True
+                "❌ 🇺🇸 You don't have permission to deny requests. Only Admins and Maintainers can do this.\n\n"
+                + "🇫🇷 Vous n'avez pas la permission de refuser les demandes. Seuls les Admins et les Mainteneurs peuvent le faire.",
+                ephemeral=True,
             )
             return
-        
+
         # Show the modal to collect the denial reason
         modal = DenialReasonModal(self)
         await interaction.response.send_modal(modal)
@@ -1119,35 +1209,44 @@ class AccessRequestView(View):
         try:
             # Get the channel
             channel = interaction.channel
-            
+
             # Try to extract request number from channel name
             request_number = "Unknown"
             try:
                 # Channel name format: request-XXXX-username
-                channel_name_parts = channel.name.split('-')
+                channel_name_parts = channel.name.split("-")
                 if len(channel_name_parts) >= 2:
                     request_number = channel_name_parts[1]
             except:
                 pass
-            
+
             try:
                 user = await interaction.guild.fetch_member(self.user_id)
                 if not user:
-                    await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                    await interaction.followup.send(
+                        "❌ Error: Could not find the user who requested access.",
+                        ephemeral=True,
+                    )
                     return
 
                 # Remove Pending role
-                pending_role = discord.utils.get(interaction.guild.roles, name="⏳ Pending")
+                pending_role = discord.utils.get(
+                    interaction.guild.roles, name="⏳ Pending"
+                )
                 if pending_role and pending_role in user.roles:
                     await user.remove_roles(pending_role)
 
                 # Remove Approved role if they had it
-                approved_role = discord.utils.get(interaction.guild.roles, name="🎟️ Approved")
+                approved_role = discord.utils.get(
+                    interaction.guild.roles, name="🎟️ Approved"
+                )
                 if approved_role and approved_role in user.roles:
                     await user.remove_roles(approved_role)
-                
+
                 # Add Denied role
-                denied_role = discord.utils.get(interaction.guild.roles, name="❌ Denied")
+                denied_role = discord.utils.get(
+                    interaction.guild.roles, name="❌ Denied"
+                )
                 if denied_role:
                     await user.add_roles(denied_role)
 
@@ -1157,68 +1256,74 @@ class AccessRequestView(View):
                 # Send denial message in channel with request number and reason
                 embed = discord.Embed(
                     title=f"❌ Request #{request_number} Denied | Demande #{request_number} Refusée",
-                    description=f"🇺🇸 {user.mention}'s access request has been denied.\n\n" +
-                                f"🇫🇷 La demande d'accès de {user.mention} a été refusée.",
-                    color=0xff0000
+                    description=f"🇺🇸 {user.mention}'s access request has been denied.\n\n"
+                    + f"🇫🇷 La demande d'accès de {user.mention} a été refusée.",
+                    color=0xFF0000,
                 )
-                
+
                 # Add the reason field
                 embed.add_field(
                     name="Denial Reason | Raison du refus",
                     value=formatted_reason,
-                    inline=False
+                    inline=False,
                 )
-                
+
                 await interaction.followup.send(embed=embed)
 
                 # Send a DM to the user with request number and reason
                 try:
                     dm_embed = discord.Embed(
                         title=f"❌ Access Request #{request_number} Denied | Demande d'Accès #{request_number} Refusée",
-                        description="🇺🇸 Your access request has been denied.\n\n" +
-                                    "🇫🇷 Votre demande d'accès a été refusée.",
-                        color=0xff0000
+                        description="🇺🇸 Your access request has been denied.\n\n"
+                        + "🇫🇷 Votre demande d'accès a été refusée.",
+                        color=0xFF0000,
                     )
-                    
+
                     # Add the reason field to DM
                     dm_embed.add_field(
                         name="Denial Reason | Raison du refus",
                         value=formatted_reason,
-                        inline=False
+                        inline=False,
                     )
-                    
+
                     # Add contact info
                     dm_embed.add_field(
                         name="Questions? | Des questions?",
-                        value="🇺🇸 If you have questions, please contact a moderator.\n\n" +
-                              "🇫🇷 Si vous avez des questions, veuillez contacter un modérateur.",
-                        inline=False
+                        value="🇺🇸 If you have questions, please contact a moderator.\n\n"
+                        + "🇫🇷 Si vous avez des questions, veuillez contacter un modérateur.",
+                        inline=False,
                     )
-                    
+
                     await user.send(embed=dm_embed)
                 except:
                     # If DM fails, add a note to the channel
-                    await channel.send("Note: Could not send DM to user (they may have DMs disabled)")
+                    await channel.send(
+                        "Note: Could not send DM to user (they may have DMs disabled)"
+                    )
 
                 # Add a message about channel deletion
                 await channel.send(
-                    f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n" +
-                    f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
-                    delete_after=300  # Delete after 5 minutes
+                    f"✅ 🇺🇸 Request #{request_number} process complete. An admin or maintainer can delete this channel using the button at the top.\n\n"
+                    + f"🇫🇷 Traitement de la demande #{request_number} terminé. Un admin ou un mainteneur peut supprimer ce canal en utilisant le bouton en haut.",
+                    delete_after=300,  # Delete after 5 minutes
                 )
             except discord.NotFound:
-                await interaction.followup.send("❌ Error: Could not find the user who requested access.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ Error: Could not find the user who requested access.",
+                    ephemeral=True,
+                )
             except Exception as e:
-                await interaction.followup.send(f"❌ Error while denying: {str(e)}", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Error while denying: {str(e)}", ephemeral=True
+                )
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+
 def create_onboarding_embed():
     embed = discord.Embed(
-        title="🎬 Welcome to Our Media Server!",
-        description="",
-        color=0x00b8ff
+        title="🎬 Welcome to Our Media Server!", description="", color=0x00B8FF
     )
 
     # English Section
@@ -1232,7 +1337,7 @@ def create_onboarding_embed():
             "4. Use Overseerr to request new content\n"
             "5. Enjoy your media on Plex!\n\n"
         ),
-        inline=False
+        inline=False,
     )
 
     # French Section
@@ -1246,10 +1351,11 @@ def create_onboarding_embed():
             "4. Utilisez Overseerr pour demander du nouveau contenu\n"
             "5. Profitez de vos médias sur Plex!\n\n"
         ),
-        inline=False
+        inline=False,
     )
 
     return embed
+
 
 @tree.command(
     name="send_intro_embed",
@@ -1259,22 +1365,29 @@ def create_onboarding_embed():
 @app_commands.checks.has_permissions(administrator=True)
 async def send_intro_embed(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Find the start-here channel
-        start_here_channel = discord.utils.get(interaction.guild.channels, name="📖｜start-here")
+        start_here_channel = discord.utils.get(
+            interaction.guild.channels, name="📖｜start-here"
+        )
         if not start_here_channel:
-            await interaction.followup.send("❌ Could not find the start-here channel!", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Could not find the start-here channel!", ephemeral=True
+            )
             return
 
         # Create and send the embed
         embed = create_onboarding_embed()
         view = OnboardingView()
         await start_here_channel.send(embed=embed, view=view)
-        
-        await interaction.followup.send("✅ Onboarding embed sent successfully!", ephemeral=True)
+
+        await interaction.followup.send(
+            "✅ Onboarding embed sent successfully!", ephemeral=True
+        )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
@@ -1282,37 +1395,50 @@ async def on_interaction(interaction: discord.Interaction):
         if interaction.data["custom_id"] == "request_access":
             await handle_access_request(interaction)
 
+
 # First, create a new view for thread deletion
 class ThreadManagementView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        
-    @discord.ui.button(label="🗑️ Delete Thread", style=discord.ButtonStyle.secondary, custom_id="delete_thread")
-    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    @discord.ui.button(
+        label="🗑️ Delete Thread",
+        style=discord.ButtonStyle.secondary,
+        custom_id="delete_thread",
+    )
+    async def delete_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Check if the user has permission (Admin or Maintainer role)
         has_permission = False
         admin_role = discord.utils.get(interaction.guild.roles, name="🛡️ Admin")
-        maintainer_role = discord.utils.get(interaction.guild.roles, name="🔧 Maintainer")
-        
-        if (admin_role and admin_role in interaction.user.roles) or \
-           (maintainer_role and maintainer_role in interaction.user.roles):
+        maintainer_role = discord.utils.get(
+            interaction.guild.roles, name="🔧 Maintainer"
+        )
+
+        if (admin_role and admin_role in interaction.user.roles) or (
+            maintainer_role and maintainer_role in interaction.user.roles
+        ):
             has_permission = True
-            
+
         if not has_permission:
             await interaction.response.send_message(
-                "❌ 🇺🇸 You don't have permission to delete this thread. Only Admins and Maintainers can do this.\n\n" +
-                "🇫🇷 Vous n'avez pas la permission de supprimer ce fil. Seuls les Admins et les Mainteneurs peuvent le faire.",
-                ephemeral=True
+                "❌ 🇺🇸 You don't have permission to delete this thread. Only Admins and Maintainers can do this.\n\n"
+                + "🇫🇷 Vous n'avez pas la permission de supprimer ce fil. Seuls les Admins et les Mainteneurs peuvent le faire.",
+                ephemeral=True,
             )
             return
-        
+
         # Delete the thread
         try:
             await interaction.response.defer(ephemeral=True)
             thread = interaction.channel
             await thread.delete()
         except Exception as e:
-            await interaction.followup.send(f"❌ Error deleting thread: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ Error deleting thread: {str(e)}", ephemeral=True
+            )
+
 
 # Function to load the request counter
 def load_request_counter():
@@ -1326,6 +1452,7 @@ def load_request_counter():
         print(f"Error loading request counter: {e}")
     return 0
 
+
 # Function to save the request counter
 def save_request_counter(counter):
     """Save the request counter to a file"""
@@ -1338,132 +1465,141 @@ def save_request_counter(counter):
     except Exception as e:
         print(f"Error saving request counter: {e}")
 
+
 # Update the handle_access_request function to use the counter
 async def handle_access_request(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         user = interaction.user
-        
+
         # Load and increment the request counter
         request_counter = load_request_counter() + 1
         save_request_counter(request_counter)
-        
+
         # Find the relevant roles
         admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
         maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
         bot_role = discord.utils.get(guild.roles, name="🤖 Bot")
         pending_role = discord.utils.get(guild.roles, name="⏳ Pending")
-        
+
         # Assign the Pending role to the user
         if pending_role and pending_role not in user.roles:
             try:
                 await user.add_roles(pending_role)
             except Exception as e:
                 print(f"Error adding Pending role to user: {e}")
-        
+
         # Find the Onboarding category
         onboarding_category = discord.utils.get(guild.categories, name="👋 Onboarding")
         if not onboarding_category:
-            await interaction.followup.send("❌ Error: Could not find the Onboarding category!", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Error: Could not find the Onboarding category!", ephemeral=True
+            )
             return
-            
+
         # Create channel permissions - only the requester, admins, and maintainers can see
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+            guild.default_role: discord.PermissionOverwrite(
+                read_messages=False, send_messages=False
+            ),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(
-                read_messages=True, 
+                read_messages=True,
                 send_messages=True,
                 manage_channels=True,
                 embed_links=True,
                 attach_files=True,
-                manage_messages=True
-            )
+                manage_messages=True,
+            ),
         }
-        
+
         # Add role permissions
         if admin_role:
-            overwrites[admin_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            overwrites[admin_role] = discord.PermissionOverwrite(
+                read_messages=True, send_messages=True
+            )
         if maintainer_role:
-            overwrites[maintainer_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            overwrites[maintainer_role] = discord.PermissionOverwrite(
+                read_messages=True, send_messages=True
+            )
         if bot_role:
             overwrites[bot_role] = discord.PermissionOverwrite(
-                read_messages=True, 
+                read_messages=True,
                 send_messages=True,
                 manage_channels=True,
                 embed_links=True,
-                attach_files=True
+                attach_files=True,
             )
-        
+
         # Create a private channel for this request with a numbered name
-        channel_name = f"request-{request_counter:04d}-{user.name.lower().replace(' ', '-')}"
+        channel_name = (
+            f"request-{request_counter:04d}-{user.name.lower().replace(' ', '-')}"
+        )
         request_channel = await guild.create_text_channel(
             name=channel_name,
             category=onboarding_category,
             overwrites=overwrites,
-            topic=f"Access request #{request_counter} from {user.name} ({user.id})"
+            topic=f"Access request #{request_counter} from {user.name} ({user.id})",
         )
-        
+
         # Send a management message for admins/mods with delete button
         admin_embed = discord.Embed(
             title=f"🔧 Request Management #{request_counter}",
-            description=f"This is a private channel for an access request from {user.mention}.\n\n" +
-                       f"{admin_role.mention if admin_role else 'Admins'} and " +
-                       f"{maintainer_role.mention if maintainer_role else 'Maintainers'}: " +
-                       f"You can delete this channel using the button below when finished.",
-            color=0x808080  # Gray
+            description=f"This is a private channel for an access request from {user.mention}.\n\n"
+            + f"{admin_role.mention if admin_role else 'Admins'} and "
+            + f"{maintainer_role.mention if maintainer_role else 'Maintainers'}: "
+            + f"You can delete this channel using the button below when finished.",
+            color=0x808080,  # Gray
         )
-        
+
         # Add French translation
         admin_embed.add_field(
             name="🇫🇷 Gestion de Requête",
-            value=f"Ceci est un canal privé pour une demande d'accès de {user.mention}.\n\n" +
-                  f"{admin_role.mention if admin_role else 'Admins'} et " +
-                  f"{maintainer_role.mention if maintainer_role else 'Mainteneurs'}: " +
-                  f"Vous pouvez supprimer ce canal en utilisant le bouton ci-dessous une fois terminé.",
-            inline=False
+            value=f"Ceci est un canal privé pour une demande d'accès de {user.mention}.\n\n"
+            + f"{admin_role.mention if admin_role else 'Admins'} et "
+            + f"{maintainer_role.mention if maintainer_role else 'Mainteneurs'}: "
+            + f"Vous pouvez supprimer ce canal en utilisant le bouton ci-dessous une fois terminé.",
+            inline=False,
         )
-        
+
         # Send admin message with delete button
         channel_mgmt_view = ChannelManagementView()
         await request_channel.send(embed=admin_embed, view=channel_mgmt_view)
-        
+
         # Then send the user request embed - Integrated bilingual format
         user_embed = discord.Embed(
             title=f"🎟 Access Request #{request_counter} | Demande d'Accès #{request_counter}",
-            description=f"🇺🇸 User: {user.mention}\n🇫🇷 Utilisateur: {user.mention}\n\n" +
-                        f"🇺🇸 Please explain why you want access to the media server:\n" +
-                        f"🇫🇷 Veuillez expliquer pourquoi vous souhaitez accéder au serveur multimédia:",
-            color=0x00b8ff
+            description=f"🇺🇸 User: {user.mention}\n🇫🇷 Utilisateur: {user.mention}\n\n"
+            + f"🇺🇸 Please explain why you want access to the media server:\n"
+            + f"🇫🇷 Veuillez expliquer pourquoi vous souhaitez accéder au serveur multimédia:",
+            color=0x00B8FF,
         )
-        
+
         # Add status info in a clean format
         if pending_role:
             user_embed.add_field(
                 name="Status | Statut",
-                value=f"🇺🇸 You've been assigned the {pending_role.mention} role while your request is processed.\n" +
-                      f"🇫🇷 Le rôle {pending_role.mention} vous a été attribué pendant le traitement de votre demande.",
-                inline=False
+                value=f"🇺🇸 You've been assigned the {pending_role.mention} role while your request is processed.\n"
+                + f"🇫🇷 Le rôle {pending_role.mention} vous a été attribué pendant le traitement de votre demande.",
+                inline=False,
             )
-        
+
         # Create access request view with user ID
         request_view = AccessRequestView(user.id, request_channel.id)
         await request_channel.send(embed=user_embed, view=request_view)
-        
+
         # Notify the user with a link to the private channel
         await interaction.followup.send(
-            f"✅ 🇺🇸 Your access request #{request_counter} has been submitted! Please check the private channel: {request_channel.mention}\n\n" +
-            f"🇫🇷 Votre demande d'accès #{request_counter} a été soumise ! Veuillez consulter le canal privé: {request_channel.mention}",
-            ephemeral=True
+            f"✅ 🇺🇸 Your access request #{request_counter} has been submitted! Please check the private channel: {request_channel.mention}\n\n"
+            + f"🇫🇷 Votre demande d'accès #{request_counter} a été soumise ! Veuillez consulter le canal privé: {request_channel.mention}",
+            ephemeral=True,
         )
-        
+
     except Exception as e:
-        await interaction.followup.send(
-            f"❌ Error: {str(e)}",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 def create_invite_embed():
     embed = discord.Embed(
@@ -1472,7 +1608,7 @@ def create_invite_embed():
             "Welcome to the invite channel! Here's your direct invite link:\n\n"
             "Follow the steps below to get started with our media server."
         ),
-        color=0x00b8ff
+        color=0x00B8FF,
     )
 
     # English Section
@@ -1493,7 +1629,7 @@ def create_invite_embed():
             "• Track your requests status\n"
             "• Get notified when content is available"
         ),
-        inline=False
+        inline=False,
     )
 
     # French Section
@@ -1514,7 +1650,7 @@ def create_invite_embed():
             "• Suivez le statut de vos demandes\n"
             "• Soyez notifié quand le contenu est disponible"
         ),
-        inline=False
+        inline=False,
     )
 
     # Important Notes
@@ -1532,15 +1668,16 @@ def create_invite_embed():
             "• Ne partagez pas votre compte\n"
             "• Pour le support, contactez un admin"
         ),
-        inline=False
+        inline=False,
     )
 
     embed.set_footer(
         text="🔐 Access is limited to approved members only | Accès limité aux membres approuvés",
-        icon_url="https://cdn.discordapp.com/emojis/1039485258276737024.webp?size=96&quality=lossless"
+        icon_url="https://cdn.discordapp.com/emojis/1039485258276737024.webp?size=96&quality=lossless",
     )
 
     return embed
+
 
 @tree.command(
     name="send_invite_embed",
@@ -1550,21 +1687,28 @@ def create_invite_embed():
 @app_commands.checks.has_permissions(administrator=True)
 async def send_invite_embed(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Find the get-invite channel
-        invite_channel = discord.utils.get(interaction.guild.channels, name="📬｜get-invite")
+        invite_channel = discord.utils.get(
+            interaction.guild.channels, name="📬｜get-invite"
+        )
         if not invite_channel:
-            await interaction.followup.send("❌ Could not find the get-invite channel!", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Could not find the get-invite channel!", ephemeral=True
+            )
             return
 
         # Create and send the embed
         embed = create_invite_embed()
         await invite_channel.send(embed=embed)
-        
-        await interaction.followup.send("✅ Invite embed sent successfully!", ephemeral=True)
+
+        await interaction.followup.send(
+            "✅ Invite embed sent successfully!", ephemeral=True
+        )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="fix_permissions",
@@ -1574,25 +1718,23 @@ async def send_invite_embed(interaction: discord.Interaction):
 @app_commands.checks.has_permissions(administrator=True)
 async def fix_permissions(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         results = []
-        
+
         # Get all roles
         everyone_role = guild.default_role
         admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
         maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
         bot_role = discord.utils.get(guild.roles, name="🤖 Bot")
         approved_role = discord.utils.get(guild.roles, name="🎟️ Approved")
-        
+
         # Define expected role permissions
         expected_permissions = {
             "🛡️ Admin": discord.Permissions(administrator=True),
             "👀 Observer": discord.Permissions(
-                view_channel=True,
-                read_messages=True,
-                read_message_history=True
+                view_channel=True, read_messages=True, read_message_history=True
             ),
             "🔧 Maintainer": discord.Permissions(
                 view_channel=True,
@@ -1604,7 +1746,7 @@ async def fix_permissions(interaction: discord.Interaction):
                 create_public_threads=True,
                 create_private_threads=True,
                 manage_threads=True,
-                moderate_members=True
+                moderate_members=True,
             ),
             "🤖 Bot": discord.Permissions(
                 view_channel=True,
@@ -1622,102 +1764,113 @@ async def fix_permissions(interaction: discord.Interaction):
                 manage_roles=True,
                 manage_channels=True,
                 manage_messages=True,
-                moderate_members=True
+                moderate_members=True,
             ),
             "🎮 Gamer": discord.Permissions(read_messages=True),
             "🎟️ Approved": discord.Permissions(read_messages=True),
             "⏳ Pending": discord.Permissions(read_messages=True),
-            "❌ Denied": discord.Permissions(read_messages=True)
+            "❌ Denied": discord.Permissions(read_messages=True),
         }
-        
+
         # Check and fix roles
         for role_name, expected_perms in expected_permissions.items():
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
                 results.append(f"❌ Role not found: {role_name}")
                 continue
-                
+
             # Compare permissions
             if role.permissions != expected_perms:
                 try:
                     await role.edit(permissions=expected_perms)
                     results.append(f"✅ Fixed permissions for role: {role_name}")
                 except discord.Forbidden:
-                    results.append(f"❌ Cannot edit permissions for role: {role_name} (Forbidden)")
+                    results.append(
+                        f"❌ Cannot edit permissions for role: {role_name} (Forbidden)"
+                    )
                 except Exception as e:
                     results.append(f"❌ Error fixing role {role_name}: {str(e)}")
             else:
                 results.append(f"✓ Role permissions are correct: {role_name}")
-        
+
         # Reset @everyone permissions
         try:
-            await everyone_role.edit(permissions=discord.Permissions(
-                view_channel=False,  # This is key - default can't view channels
-                connect=True,
-                speak=False,
-                use_application_commands=True,
-                use_embedded_activities=True
-            ))
+            await everyone_role.edit(
+                permissions=discord.Permissions(
+                    view_channel=False,  # This is key - default can't view channels
+                    connect=True,
+                    speak=False,
+                    use_application_commands=True,
+                    use_embedded_activities=True,
+                )
+            )
             results.append("✅ Set @everyone to hide all channels by default")
         except Exception as e:
             results.append(f"❌ Failed to reset @everyone permissions: {str(e)}")
-        
+
         # Process ALL categories that exist
         for category in guild.categories:
             try:
                 # Create category overwrites
                 overwrites = {
-                    everyone_role: discord.PermissionOverwrite(view_channel=False, read_messages=False)
+                    everyone_role: discord.PermissionOverwrite(
+                        view_channel=False, read_messages=False
+                    )
                 }
-                
+
                 # Add admin/maintainer permissions
                 if admin_role:
                     overwrites[admin_role] = discord.PermissionOverwrite(
-                        view_channel=True, 
-                        read_messages=True,
-                        send_messages=True
+                        view_channel=True, read_messages=True, send_messages=True
                     )
-                
+
                 if maintainer_role:
                     overwrites[maintainer_role] = discord.PermissionOverwrite(
-                        view_channel=True, 
-                        read_messages=True,
-                        send_messages=True
+                        view_channel=True, read_messages=True, send_messages=True
                     )
-                
+
                 if bot_role:
                     overwrites[bot_role] = discord.PermissionOverwrite(
-                        view_channel=True, 
+                        view_channel=True,
                         read_messages=True,
                         send_messages=True,
-                        manage_messages=True
+                        manage_messages=True,
                     )
-                
+
                 # Only give approved users access to non-admin categories
                 is_admin_category = (
-                    "admin" in category.name.lower() or 
-                    "alert" in category.name.lower() or
-                    "bot command" in category.name.lower()
+                    "admin" in category.name.lower()
+                    or "alert" in category.name.lower()
+                    or "bot command" in category.name.lower()
                 )
-                
+
                 # If it's a normal category, allow approved users access
-                if approved_role and not is_admin_category and "onboarding" not in category.name.lower():
+                if (
+                    approved_role
+                    and not is_admin_category
+                    and "onboarding" not in category.name.lower()
+                ):
                     overwrites[approved_role] = discord.PermissionOverwrite(
-                        view_channel=True, 
-                        read_messages=True,
-                        send_messages=True
+                        view_channel=True, read_messages=True, send_messages=True
                     )
-                
+
                 # Apply the overwrites to the category
                 await category.edit(overwrites=overwrites)
-                results.append(f"✅ Set default permissions for category: {category.name}")
-                
+                results.append(
+                    f"✅ Set default permissions for category: {category.name}"
+                )
+
                 # Sync all channels in the category (except special ones)
                 for channel in category.channels:
                     # Skip special channels
-                    if channel.name == "📖｜start-here" or channel.name == "📬｜get-invite" or channel.name == "🎫｜access-requests" or channel.name.startswith("🔒"):
+                    if (
+                        channel.name == "📖｜start-here"
+                        or channel.name == "📬｜get-invite"
+                        or channel.name == "🎫｜access-requests"
+                        or channel.name.startswith("🔒")
+                    ):
                         continue
-                    
+
                     try:
                         await channel.edit(sync_permissions=True)
                         results.append(f"✅ Synced permissions for: {channel.name}")
@@ -1725,89 +1878,95 @@ async def fix_permissions(interaction: discord.Interaction):
                         results.append(f"❌ Failed to sync {channel.name}: {str(e)}")
             except Exception as e:
                 results.append(f"❌ Error setting category {category.name}: {str(e)}")
-        
+
         # Special channel permissions
         special_channels = {
             "📖｜start-here": {
                 "default": discord.PermissionOverwrite(
-                    view_channel=True, 
-                    read_messages=True, 
+                    view_channel=True,
+                    read_messages=True,
                     read_message_history=True,  # Ensure message history is readable
-                    send_messages=False
+                    send_messages=False,
                 ),
                 "🤖 Bot": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
-                )
+                    send_messages=True,
+                ),
             },
             "📬｜get-invite": {
-                "default": discord.PermissionOverwrite(view_channel=False, read_messages=False),
+                "default": discord.PermissionOverwrite(
+                    view_channel=False, read_messages=False
+                ),
                 "🎟️ Approved": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,  # Ensure message history is readable
-                    send_messages=False
+                    send_messages=False,
                 ),
                 "🤖 Bot": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
-                )
+                    send_messages=True,
+                ),
             },
             "🎫｜access-requests": {
-                "default": discord.PermissionOverwrite(view_channel=False, read_messages=False),
+                "default": discord.PermissionOverwrite(
+                    view_channel=False, read_messages=False
+                ),
                 "🛡️ Admin": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
+                    send_messages=True,
                 ),
                 "🔧 Maintainer": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
+                    send_messages=True,
                 ),
                 "🤖 Bot": discord.PermissionOverwrite(
-                    view_channel=True, 
+                    view_channel=True,
                     read_messages=True,
                     read_message_history=True,
-                    send_messages=True
-                )
-            }
+                    send_messages=True,
+                ),
+            },
         }
-        
+
         # Add any channels with "admin" in name or starting with 🔒
         for channel in guild.channels:
             if isinstance(channel, discord.CategoryChannel):
                 continue
-                
+
             if "admin" in channel.name.lower() or channel.name.startswith("🔒"):
                 special_channels[channel.name] = {
-                    "default": discord.PermissionOverwrite(view_channel=False, read_messages=False),
+                    "default": discord.PermissionOverwrite(
+                        view_channel=False, read_messages=False
+                    ),
                     "🛡️ Admin": discord.PermissionOverwrite(
-                        view_channel=True, 
+                        view_channel=True,
                         read_messages=True,
                         read_message_history=True,
-                        send_messages=True
+                        send_messages=True,
                     ),
                     "🔧 Maintainer": discord.PermissionOverwrite(
-                        view_channel=True, 
+                        view_channel=True,
                         read_messages=True,
                         read_message_history=True,
-                        send_messages=True
+                        send_messages=True,
                     ),
                     "🤖 Bot": discord.PermissionOverwrite(
-                        view_channel=True, 
+                        view_channel=True,
                         read_messages=True,
                         read_message_history=True,
-                        send_messages=True
-                    )
+                        send_messages=True,
+                    ),
                 }
-        
+
         # Apply special channel permissions
         for channel_name, perms in special_channels.items():
             channel = discord.utils.get(guild.channels, name=channel_name)
@@ -1817,48 +1976,65 @@ async def fix_permissions(interaction: discord.Interaction):
                     if channel_name in guild_channel.name:
                         channel = guild_channel
                         break
-            
+
             if not channel:
                 results.append(f"❌ Channel not found: {channel_name}")
                 continue
-                
+
             # Set channel permissions
             for role_name, overwrite in perms.items():
                 if role_name == "default":
                     try:
-                        await channel.set_permissions(everyone_role, overwrite=overwrite)
-                        results.append(f"✅ Set default permissions for channel: {channel.name}")
+                        await channel.set_permissions(
+                            everyone_role, overwrite=overwrite
+                        )
+                        results.append(
+                            f"✅ Set default permissions for channel: {channel.name}"
+                        )
                     except Exception as e:
-                        results.append(f"❌ Error setting default permissions for channel {channel.name}: {str(e)}")
+                        results.append(
+                            f"❌ Error setting default permissions for channel {channel.name}: {str(e)}"
+                        )
                 else:
                     role = discord.utils.get(guild.roles, name=role_name)
                     if not role:
-                        results.append(f"❌ Role not found for channel permission: {role_name}")
+                        results.append(
+                            f"❌ Role not found for channel permission: {role_name}"
+                        )
                         continue
-                        
+
                     try:
                         await channel.set_permissions(role, overwrite=overwrite)
-                        results.append(f"✅ Set {role_name} permissions for channel: {channel.name}")
+                        results.append(
+                            f"✅ Set {role_name} permissions for channel: {channel.name}"
+                        )
                     except Exception as e:
-                        results.append(f"❌ Error setting {role_name} permissions for channel {channel.name}: {str(e)}")
-        
+                        results.append(
+                            f"❌ Error setting {role_name} permissions for channel {channel.name}: {str(e)}"
+                        )
+
         # Fix request channels for users
-        request_channels = [ch for ch in guild.channels if ch.name.startswith("request-")]
+        request_channels = [
+            ch for ch in guild.channels if ch.name.startswith("request-")
+        ]
         for channel in request_channels:
             try:
                 # Extract the username from the channel name (format is request-XXXX-username)
-                channel_parts = channel.name.split('-')
+                channel_parts = channel.name.split("-")
                 if len(channel_parts) >= 3:
                     # Get everything after the second dash
-                    username = '-'.join(channel_parts[2:])
-                    
+                    username = "-".join(channel_parts[2:])
+
                     # Try to find the user with this name
                     target_user = None
                     for member in guild.members:
-                        if member.name.lower() == username.lower() or username.lower() in member.name.lower():
+                        if (
+                            member.name.lower() == username.lower()
+                            or username.lower() in member.name.lower()
+                        ):
                             target_user = member
                             break
-                    
+
                     if target_user:
                         # Update the user's permissions to read history
                         await channel.set_permissions(
@@ -1866,30 +2042,34 @@ async def fix_permissions(interaction: discord.Interaction):
                             view_channel=True,
                             read_messages=True,
                             read_message_history=True,
-                            send_messages=True
+                            send_messages=True,
                         )
-                        results.append(f"✅ Fixed permissions for {channel.name} - {target_user.name} can now read history")
+                        results.append(
+                            f"✅ Fixed permissions for {channel.name} - {target_user.name} can now read history"
+                        )
                     else:
-                        results.append(f"❌ Could not find user for channel: {channel.name}")
+                        results.append(
+                            f"❌ Could not find user for channel: {channel.name}"
+                        )
             except Exception as e:
                 results.append(f"❌ Error fixing {channel.name}: {str(e)}")
-                
+
         # Create an embed with the results
         embed = discord.Embed(
             title="🔧 Permission Check Results",
             description="Here's what was fixed:",
-            color=0x00b8ff
+            color=0x00B8FF,
         )
-        
+
         # Split results into chunks to avoid hitting embed field limits
-        chunks = [results[i:i+10] for i in range(0, len(results), 10)]
+        chunks = [results[i : i + 10] for i in range(0, len(results), 10)]
         for i, chunk in enumerate(chunks):
             embed.add_field(
                 name=f"Results {i+1}/{len(chunks)}",
                 value="\n".join(chunk),
-                inline=False
+                inline=False,
             )
-        
+
         # Add summary
         embed.add_field(
             name="Summary",
@@ -1902,43 +2082,48 @@ async def fix_permissions(interaction: discord.Interaction):
                 "• Approved users can't access admin areas\n"
                 "• Approved users can access media channels"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
-        
+
     except Exception as e:
-        await interaction.followup.send(f"❌ Error updating permissions: {str(e)}", ephemeral=True)
+        await interaction.followup.send(
+            f"❌ Error updating permissions: {str(e)}", ephemeral=True
+        )
+
 
 # Add this to handle command errors globally
 @tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+async def on_app_command_error(
+    interaction: discord.Interaction, error: app_commands.AppCommandError
+):
     if isinstance(error, app_commands.errors.MissingPermissions):
         # Handle missing permissions gracefully
         await interaction.response.send_message(
             "❌ You don't have permission to use this command. This command requires administrator privileges.",
-            ephemeral=True
+            ephemeral=True,
         )
     elif isinstance(error, app_commands.CommandOnCooldown):
         # Handle cooldown errors
         await interaction.response.send_message(
             f"⏳ This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.",
-            ephemeral=True
+            ephemeral=True,
         )
     elif isinstance(error, app_commands.errors.CommandNotFound):
         # Handle command not found errors
         await interaction.response.send_message(
             "❓ Command not found. Use `/commands` to see available commands.",
-            ephemeral=True
+            ephemeral=True,
         )
     else:
         # Handle any other errors
         await interaction.response.send_message(
-            f"❌ An error occurred: {str(error)}",
-            ephemeral=True
+            f"❌ An error occurred: {str(error)}", ephemeral=True
         )
         # Log the full error to console
         print(f"Command error: {error}")
+
 
 @tree.command(
     name="restrict_channels",
@@ -1948,17 +2133,17 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 @app_commands.checks.has_permissions(administrator=True)
 async def restrict_channels(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         results = []
-        
+
         # Find all roles
         admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
         maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
         bot_role = discord.utils.get(guild.roles, name="🤖 Bot")
         approved_role = discord.utils.get(guild.roles, name="🎟️ Approved")
-        
+
         # Make sure @everyone has minimal base permissions
         everyone_role = guild.default_role
         try:
@@ -1975,25 +2160,23 @@ async def restrict_channels(interaction: discord.Interaction):
             results.append("✅ Reset @everyone role to minimal permissions")
         except Exception as e:
             results.append(f"❌ Failed to reset @everyone permissions: {str(e)}")
-        
+
         # Find the start-here channel - the only one visible to everyone
         start_here = discord.utils.get(guild.channels, name="📖｜start-here")
-        
+
         # Go through EVERY channel in the server
         for channel in guild.channels:
             # Skip categories for now
             if isinstance(channel, discord.CategoryChannel):
                 continue
-                
+
             try:
                 # Default: DENY access to everyone except in start-here
                 if channel == start_here:
                     # For start-here: everyone can see, only bot/admins can send
                     overwrites = {
                         everyone_role: discord.PermissionOverwrite(
-                            view_channel=True,
-                            read_messages=True,
-                            send_messages=False
+                            view_channel=True, read_messages=True, send_messages=False
                         )
                     }
                     results.append(f"✅ Set start-here channel visible to everyone")
@@ -2001,23 +2184,19 @@ async def restrict_channels(interaction: discord.Interaction):
                     # Only approved users can see this
                     overwrites = {
                         everyone_role: discord.PermissionOverwrite(
-                            view_channel=False,
-                            read_messages=False
+                            view_channel=False, read_messages=False
                         )
                     }
                     if approved_role:
                         overwrites[approved_role] = discord.PermissionOverwrite(
-                            view_channel=True,
-                            read_messages=True,
-                            send_messages=False
+                            view_channel=True, read_messages=True, send_messages=False
                         )
                     results.append(f"✅ Set get-invite channel for approved users only")
                 elif channel.name.startswith("🔒") or channel.name.startswith("🎫"):
                     # Admin/maintainer only channels
                     overwrites = {
                         everyone_role: discord.PermissionOverwrite(
-                            view_channel=False,
-                            read_messages=False
+                            view_channel=False, read_messages=False
                         )
                     }
                     results.append(f"✅ Set {channel.name} to admin/maintainer only")
@@ -2025,33 +2204,29 @@ async def restrict_channels(interaction: discord.Interaction):
                     # All other channels: visible only to approved users
                     overwrites = {
                         everyone_role: discord.PermissionOverwrite(
-                            view_channel=False,
-                            read_messages=False
+                            view_channel=False, read_messages=False
                         )
                     }
                     if approved_role:
                         overwrites[approved_role] = discord.PermissionOverwrite(
-                            view_channel=True,
-                            read_messages=True
+                            view_channel=True, read_messages=True
                         )
                     results.append(f"✅ Set {channel.name} to approved users only")
-                
+
                 # Always add admin, maintainer and bot permissions
                 if admin_role:
                     overwrites[admin_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
-                        manage_messages=True
+                        manage_messages=True,
                     )
-                
+
                 if maintainer_role:
                     overwrites[maintainer_role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        read_messages=True,
-                        send_messages=True
+                        view_channel=True, read_messages=True, send_messages=True
                     )
-                
+
                 if bot_role:
                     overwrites[bot_role] = discord.PermissionOverwrite(
                         view_channel=True,
@@ -2059,31 +2234,33 @@ async def restrict_channels(interaction: discord.Interaction):
                         send_messages=True,
                         manage_messages=True,
                         embed_links=True,
-                        attach_files=True
+                        attach_files=True,
                     )
-                
+
                 # Apply the permission overwrites to the channel
                 await channel.edit(overwrites=overwrites)
-                
+
             except Exception as e:
-                results.append(f"❌ Error setting permissions for {channel.name}: {str(e)}")
-        
+                results.append(
+                    f"❌ Error setting permissions for {channel.name}: {str(e)}"
+                )
+
         # Create an embed with the results
         embed = discord.Embed(
             title="🔒 Channel Restriction Results",
             description="**STRICT PERMISSIONS APPLIED**",
-            color=0xFF0000
+            color=0xFF0000,
         )
-        
+
         # Split results into chunks to avoid hitting embed field limits
-        chunks = [results[i:i+15] for i in range(0, len(results), 15)]
+        chunks = [results[i : i + 15] for i in range(0, len(results), 15)]
         for i, chunk in enumerate(chunks):
             embed.add_field(
                 name=f"Results {i+1}/{len(chunks)}",
                 value="\n".join(chunk),
-                inline=False
+                inline=False,
             )
-        
+
         # Add final summary
         embed.add_field(
             name="⚠️ IMPORTANT",
@@ -2095,13 +2272,16 @@ async def restrict_channels(interaction: discord.Interaction):
                 "• Channel-specific permissions override category permissions\n\n"
                 "If any channel is still visible to unapproved users, please report it."
             ),
-            inline=False
+            inline=False,
         )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
-        
+
     except Exception as e:
-        await interaction.followup.send(f"❌ Error restricting channels: {str(e)}", ephemeral=True)
+        await interaction.followup.send(
+            f"❌ Error restricting channels: {str(e)}", ephemeral=True
+        )
+
 
 def start_bot():
     if not TOKEN:
@@ -2112,6 +2292,7 @@ def start_bot():
         return
     bot.run(TOKEN)
 
+
 @tree.command(
     name="lock_server",
     description="EMERGENCY: Lock down all channels for new users",
@@ -2120,19 +2301,19 @@ def start_bot():
 @app_commands.checks.has_permissions(administrator=True)
 async def lock_server(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         results = []
         fixed_channels = 0
-        
+
         # Get all roles
         everyone_role = guild.default_role
         admin_role = discord.utils.get(guild.roles, name="🛡️ Admin")
         maintainer_role = discord.utils.get(guild.roles, name="🔧 Maintainer")
         bot_role = discord.utils.get(guild.roles, name="🤖 Bot")
         approved_role = discord.utils.get(guild.roles, name="🎟️ Approved")
-        
+
         # Forcefully reset @everyone permissions to absolute minimum
         try:
             minimal_perms = discord.Permissions(
@@ -2144,16 +2325,16 @@ async def lock_server(interaction: discord.Interaction):
                 view_channel=False,
                 # Keep basic functionality
                 use_application_commands=True,
-                use_embedded_activities=True
+                use_embedded_activities=True,
             )
             await everyone_role.edit(permissions=minimal_perms)
             results.append("✅ Reset @everyone permissions to absolute minimum")
         except Exception as e:
             results.append(f"❌ Failed to reset @everyone: {str(e)}")
-        
+
         # Find start-here channel - the ONLY one that should be visible
         start_here = discord.utils.get(guild.channels, name="📖｜start-here")
-        
+
         # Step 1: Reset all categories first with explicit denies
         for category in guild.categories:
             try:
@@ -2165,109 +2346,130 @@ async def lock_server(interaction: discord.Interaction):
                         send_messages=False,
                         read_message_history=False,
                         connect=False,
-                        speak=False
+                        speak=False,
                     )
                 }
-                
+
                 # Add role permissions
                 if admin_role:
                     overwrites[admin_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
-                        read_message_history=True
+                        read_message_history=True,
                     )
-                
+
                 if maintainer_role:
                     overwrites[maintainer_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
-                        read_message_history=True
+                        read_message_history=True,
                     )
-                
+
                 if bot_role:
                     overwrites[bot_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
                         read_message_history=True,
-                        manage_messages=True
+                        manage_messages=True,
                     )
-                
+
                 if approved_role and category.name != "👋 Onboarding":
                     # Only give approved users access to non-onboarding categories
                     overwrites[approved_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
-                        read_message_history=True
+                        read_message_history=True,
                     )
-                
+
                 await category.edit(overwrites=overwrites)
-                results.append(f"✅ Set strict permissions for category: {category.name}")
-                
+                results.append(
+                    f"✅ Set strict permissions for category: {category.name}"
+                )
+
                 # Force sync all channels in this category to match category permissions
                 for channel in category.channels:
                     try:
                         # Skip the start-here channel - we'll handle it separately
                         if channel == start_here:
                             continue
-                            
+
                         # Admin-only channels should stay admin-only
-                        if channel.name.startswith("🔒") or channel.name.startswith("🎫") or channel.name == "📬｜get-invite" or "admin" in channel.name:
+                        if (
+                            channel.name.startswith("🔒")
+                            or channel.name.startswith("🎫")
+                            or channel.name == "📬｜get-invite"
+                            or "admin" in channel.name
+                        ):
                             # Create special permissions for admin/invite channels
                             special_overwrites = {
                                 everyone_role: discord.PermissionOverwrite(
                                     view_channel=False,
                                     read_messages=False,
-                                    send_messages=False
+                                    send_messages=False,
                                 )
                             }
-                            
+
                             if admin_role:
-                                special_overwrites[admin_role] = discord.PermissionOverwrite(
-                                    view_channel=True,
-                                    read_messages=True,
-                                    send_messages=True
+                                special_overwrites[admin_role] = (
+                                    discord.PermissionOverwrite(
+                                        view_channel=True,
+                                        read_messages=True,
+                                        send_messages=True,
+                                    )
                                 )
-                                
+
                             if maintainer_role:
-                                special_overwrites[maintainer_role] = discord.PermissionOverwrite(
-                                    view_channel=True,
-                                    read_messages=True,
-                                    send_messages=True
+                                special_overwrites[maintainer_role] = (
+                                    discord.PermissionOverwrite(
+                                        view_channel=True,
+                                        read_messages=True,
+                                        send_messages=True,
+                                    )
                                 )
-                                
+
                             if bot_role:
-                                special_overwrites[bot_role] = discord.PermissionOverwrite(
-                                    view_channel=True,
-                                    read_messages=True,
-                                    send_messages=True
+                                special_overwrites[bot_role] = (
+                                    discord.PermissionOverwrite(
+                                        view_channel=True,
+                                        read_messages=True,
+                                        send_messages=True,
+                                    )
                                 )
-                                
+
                             # For get-invite channel, also allow approved users
                             if channel.name == "📬｜get-invite" and approved_role:
-                                special_overwrites[approved_role] = discord.PermissionOverwrite(
-                                    view_channel=True,
-                                    read_messages=True,
-                                    send_messages=False
+                                special_overwrites[approved_role] = (
+                                    discord.PermissionOverwrite(
+                                        view_channel=True,
+                                        read_messages=True,
+                                        send_messages=False,
+                                    )
                                 )
-                                
-                            await channel.edit(overwrites=special_overwrites, sync_permissions=False)
-                            results.append(f"✅ Set restricted permissions for {channel.name}")
+
+                            await channel.edit(
+                                overwrites=special_overwrites, sync_permissions=False
+                            )
+                            results.append(
+                                f"✅ Set restricted permissions for {channel.name}"
+                            )
                         else:
                             # For normal channels, sync with category
                             await channel.edit(sync_permissions=True)
-                            results.append(f"✅ Synced {channel.name} with category permissions")
-                        
+                            results.append(
+                                f"✅ Synced {channel.name} with category permissions"
+                            )
+
                         fixed_channels += 1
                     except Exception as e:
                         results.append(f"❌ Failed to set {channel.name}: {str(e)}")
-                
+
             except Exception as e:
                 results.append(f"❌ Failed to set category {category.name}: {str(e)}")
-        
+
         # Handle start-here channel separately with explicit permissions
         if start_here:
             try:
@@ -2276,65 +2478,71 @@ async def lock_server(interaction: discord.Interaction):
                         view_channel=True,
                         read_messages=True,
                         send_messages=False,
-                        read_message_history=True
+                        read_message_history=True,
                     ),
                     bot_role: discord.PermissionOverwrite(
-                        view_channel=True, 
+                        view_channel=True,
                         read_messages=True,
                         send_messages=True,
                         read_message_history=True,
                         manage_messages=True,
                         embed_links=True,
-                        attach_files=True
-                    )
+                        attach_files=True,
+                    ),
                 }
-                
+
                 if admin_role:
                     start_here_overwrites[admin_role] = discord.PermissionOverwrite(
                         view_channel=True,
                         read_messages=True,
                         send_messages=True,
                         read_message_history=True,
-                        manage_messages=True
+                        manage_messages=True,
                     )
-                
+
                 if maintainer_role:
-                    start_here_overwrites[maintainer_role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        read_messages=True,
-                        send_messages=True,
-                        read_message_history=True
+                    start_here_overwrites[maintainer_role] = (
+                        discord.PermissionOverwrite(
+                            view_channel=True,
+                            read_messages=True,
+                            send_messages=True,
+                            read_message_history=True,
+                        )
                     )
-                
-                await start_here.edit(overwrites=start_here_overwrites, sync_permissions=False)
+
+                await start_here.edit(
+                    overwrites=start_here_overwrites, sync_permissions=False
+                )
                 results.append(f"✅ Set start-here visible to everyone but read-only")
                 fixed_channels += 1
             except Exception as e:
                 results.append(f"❌ Failed to set start-here channel: {str(e)}")
-        
+
         # Create an embed with the results
         embed = discord.Embed(
             title="🚨 EMERGENCY SERVER LOCKDOWN",
             description="**The server has been locked down with strict permissions:**",
-            color=0xFF0000
+            color=0xFF0000,
         )
-        
+
         # Add stats
         embed.add_field(
             name="📊 Stats",
             value=f"• Fixed {fixed_channels} channels\n• Reset @everyone permissions\n• Applied explicit denies everywhere",
-            inline=False
+            inline=False,
         )
-        
+
         # Split results into chunks
-        chunks = [results[i:i+10] for i in range(0, len(results), 10)]
-        for i, chunk in enumerate(chunks[:3]):  # Limit to first 3 chunks to avoid too many fields
+        chunks = [results[i : i + 10] for i in range(0, len(results), 10)]
+        for i, chunk in enumerate(
+            chunks[:3]
+        ):  # Limit to first 3 chunks to avoid too many fields
             embed.add_field(
                 name=f"Results {i+1}/{min(len(chunks), 3)}",
                 value="\n".join(chunk),
-                inline=False
+                inline=False,
             )
-        
+
         # Add security notes
         embed.add_field(
             name="🔐 Security Configuration",
@@ -2346,13 +2554,16 @@ async def lock_server(interaction: discord.Interaction):
                 "• Channel-specific permissions applied\n"
                 "• @everyone role has been locked down"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
-        
+
     except Exception as e:
-        await interaction.followup.send(f"❌ Emergency lockdown failed: {str(e)}", ephemeral=True)
+        await interaction.followup.send(
+            f"❌ Emergency lockdown failed: {str(e)}", ephemeral=True
+        )
+
 
 @tree.command(
     name="fix_start_here",
@@ -2362,12 +2573,12 @@ async def lock_server(interaction: discord.Interaction):
 @app_commands.checks.has_permissions(administrator=True)
 async def fix_start_here(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         everyone_role = guild.default_role
         bot_role = discord.utils.get(guild.roles, name="🤖 Bot")
-        
+
         # Find start-here channel
         start_here = discord.utils.get(guild.channels, name="📖｜start-here")
         if not start_here:
@@ -2376,20 +2587,22 @@ async def fix_start_here(interaction: discord.Interaction):
                 if "start-here" in channel.name:
                     start_here = channel
                     break
-        
+
         if not start_here:
-            await interaction.followup.send("❌ Could not find the start-here channel!", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Could not find the start-here channel!", ephemeral=True
+            )
             return
-            
+
         # Set explicit permissions for everyone to see and read but not write
         await start_here.set_permissions(
-            everyone_role, 
+            everyone_role,
             view_channel=True,
             read_messages=True,
             read_message_history=True,
-            send_messages=False
+            send_messages=False,
         )
-        
+
         # Make sure bot can send messages
         if bot_role:
             await start_here.set_permissions(
@@ -2399,13 +2612,17 @@ async def fix_start_here(interaction: discord.Interaction):
                 read_message_history=True,
                 send_messages=True,
                 embed_links=True,
-                attach_files=True
+                attach_files=True,
             )
-            
-        await interaction.followup.send("✅ Fixed start-here channel! Everyone can now view messages but not send them.", ephemeral=True)
-        
+
+        await interaction.followup.send(
+            "✅ Fixed start-here channel! Everyone can now view messages but not send them.",
+            ephemeral=True,
+        )
+
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 @tree.command(
     name="fix_read_permissions",
@@ -2415,44 +2632,51 @@ async def fix_start_here(interaction: discord.Interaction):
 @app_commands.checks.has_permissions(administrator=True)
 async def fix_read_permissions(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         guild = interaction.guild
         everyone_role = guild.default_role
         results = []
-        
+
         # 1. Fix start-here channel
         start_here = discord.utils.get(guild.channels, name="📖｜start-here")
         if start_here:
             # Everyone should be able to view channel and read history
             await start_here.set_permissions(
-                everyone_role, 
+                everyone_role,
                 view_channel=True,
                 read_messages=True,
                 read_message_history=True,
-                send_messages=False
+                send_messages=False,
             )
-            results.append("✅ Fixed start-here channel - everyone can now read message history")
+            results.append(
+                "✅ Fixed start-here channel - everyone can now read message history"
+            )
         else:
             results.append("❌ Could not find start-here channel")
-        
+
         # 2. Fix all request channels - ensure users can read history in their own request channel
-        request_channels = [channel for channel in guild.channels if channel.name.startswith("request-")]
+        request_channels = [
+            channel for channel in guild.channels if channel.name.startswith("request-")
+        ]
         for channel in request_channels:
             try:
                 # Extract the username from the channel name (format is request-XXXX-username)
-                channel_parts = channel.name.split('-')
+                channel_parts = channel.name.split("-")
                 if len(channel_parts) >= 3:
                     # Get everything after the second dash
-                    username = '-'.join(channel_parts[2:])
-                    
+                    username = "-".join(channel_parts[2:])
+
                     # Try to find the user with this name
                     target_user = None
                     for member in guild.members:
-                        if member.name.lower() == username.lower() or username.lower() in member.name.lower():
+                        if (
+                            member.name.lower() == username.lower()
+                            or username.lower() in member.name.lower()
+                        ):
                             target_user = member
                             break
-                    
+
                     if target_user:
                         # Update the user's permissions to read history
                         await channel.set_permissions(
@@ -2460,50 +2684,55 @@ async def fix_read_permissions(interaction: discord.Interaction):
                             view_channel=True,
                             read_messages=True,
                             read_message_history=True,
-                            send_messages=True
+                            send_messages=True,
                         )
-                        results.append(f"✅ Fixed permissions for {channel.name} - {target_user.name} can now read history")
+                        results.append(
+                            f"✅ Fixed permissions for {channel.name} - {target_user.name} can now read history"
+                        )
                     else:
-                        results.append(f"❌ Could not find user for channel: {channel.name}")
+                        results.append(
+                            f"❌ Could not find user for channel: {channel.name}"
+                        )
             except Exception as e:
                 results.append(f"❌ Error fixing {channel.name}: {str(e)}")
-                
+
         embed = discord.Embed(
             title="🔧 Read Permission Fix",
             description="Results of fixing read permissions:",
-            color=0x00b8ff
+            color=0x00B8FF,
         )
-        
+
         embed.add_field(name="Changes", value="\n".join(results), inline=False)
-        
+
         await interaction.followup.send(embed=embed, ephemeral=True)
-        
+
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 # Add this class for the denial reason modal
 class DenialReasonModal(discord.ui.Modal):
     def __init__(self, view_instance):
         super().__init__(title="Denial Reason")
         self.view_instance = view_instance
-        
+
         self.reason_input = discord.ui.TextInput(
             label="Reason for denial",
             placeholder="Please explain why this request is being denied...",
             style=discord.TextStyle.paragraph,
             required=True,
-            max_length=1000
+            max_length=1000,
         )
         self.add_item(self.reason_input)
-        
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         await self.view_instance.process_denial(interaction, self.reason_input.value)
 
+
 def create_overseerr_embed():
     embed = discord.Embed(
-        title="🎬 Media Request Guide | Guide de Demande de Média",
-        color=0x00b8ff
+        title="🎬 Media Request Guide | Guide de Demande de Média", color=0x00B8FF
     )
 
     # English Section
@@ -2516,12 +2745,12 @@ def create_overseerr_embed():
             "1. Visit [Overseerr](https://overseer.tessdev.fr)\n"
             "2. Log in using your **Discord** account\n"
             "3. Use the search bar to find the movie or series you want\n"
-            "4. Click on **\"Request\"** — and you're done!\n\n"
+            '4. Click on **"Request"** — and you\'re done!\n\n'
             "💡 Once approved, your request will be downloaded and added to the server automatically.\n\n"
             "If you need help, feel free to ask in this channel or contact an admin.\n"
             "Enjoy! 🍿\n\n"
         ),
-        inline=False
+        inline=False,
     )
 
     # French Section
@@ -2534,28 +2763,30 @@ def create_overseerr_embed():
             "1. Allez sur [Overseerr](https://overseer.tessdev.fr)\n"
             "2. Connectez-vous avec votre **compte Discord**\n"
             "3. Utilisez la barre de recherche pour trouver le film ou la série souhaité(e)\n"
-            "4. Cliquez sur **\"Demander\"** — et c'est terminé !\n\n"
+            '4. Cliquez sur **"Demander"** — et c\'est terminé !\n\n'
             "💡 Une fois approuvée, votre demande sera automatiquement téléchargée et ajoutée au serveur.\n\n"
             "Si vous avez besoin d'aide, posez votre question ici ou contactez un admin.\n"
             "Bon visionnage ! 🍿"
         ),
-        inline=False
+        inline=False,
     )
 
     return embed
+
 
 # Add this class for the button that redirects to Overseerr
 class OverseerrView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        
+
         # Add a URL button directly instead of using the decorator
         overseerr_button = discord.ui.Button(
-            label="🔍 Go to Overseerr | Aller à Overseerr", 
+            label="🔍 Go to Overseerr | Aller à Overseerr",
             style=discord.ButtonStyle.link,
-            url="https://overseer.tessdev.fr"
+            url="https://overseer.tessdev.fr",
         )
         self.add_item(overseerr_button)
+
 
 # Add a command to send the overseerr embed
 @tree.command(
@@ -2566,16 +2797,19 @@ class OverseerrView(View):
 @app_commands.checks.has_permissions(administrator=True)
 async def send_overseerr_embed(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+
     try:
         # Create and send the embed with button
         embed = create_overseerr_embed()
         view = OverseerrView()
         await interaction.channel.send(embed=embed, view=view)
-        
-        await interaction.followup.send("✅ Overseerr guide embed sent successfully!", ephemeral=True)
+
+        await interaction.followup.send(
+            "✅ Overseerr guide embed sent successfully!", ephemeral=True
+        )
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 
 if __name__ == "__main__":
     start_bot()
