@@ -88,37 +88,29 @@ def load_dashboard_state():
 
 def format_uptime(uptime_seconds):
     """Format uptime into a human-readable string with appropriate units"""
-    # First, let's directly convert total seconds to more readable units
-    # Convert hours first
-    total_hours = uptime_seconds / 3600
+    # Convert to days, hours, minutes, seconds in a straightforward way
+    days = int(uptime_seconds // 86400)  # 86400 seconds in a day
+    hours = int((uptime_seconds % 86400) // 3600)
+    minutes = int((uptime_seconds % 3600) // 60)
+    seconds = int(uptime_seconds % 60)
 
-    # If we have more than 24 hours, convert to days explicitly
-    if total_hours >= 24:
-        days = int(total_hours // 24)
-        hours = int(total_hours % 24)
-        minutes = int((uptime_seconds % 3600) // 60)
-        seconds = int(uptime_seconds % 60)
+    # Force always showing days if uptime is over 24 hours
+    result = ""
+    if days > 0:
+        result += f"{days}d "
+    result += f"{hours}h {minutes}m {seconds}s"
 
-        # Further convert to weeks if we have enough days
-        if days >= 7:
-            weeks = days // 7
-            days = days % 7
-            return f"{int(weeks)}w {int(days)}d {hours}h {minutes}m {seconds}s"
-        else:
-            return f"{days}d {hours}h {minutes}m {seconds}s"
-    else:
-        # Less than 24 hours, use original calculation
-        hours = int(total_hours)
-        minutes = int((uptime_seconds % 3600) // 60)
-        seconds = int(uptime_seconds % 60)
-        return f"{hours}h {minutes}m {seconds}s"
+    print(
+        f"DEBUG: Uptime seconds={uptime_seconds}, Converted to: {days}d {hours}h {minutes}m {seconds}s"
+    )
+    return result
 
 
 def create_health_embed():
     # Calculate uptime (since system boot) formatted as h m s.
     uptime_seconds = time.time() - psutil.boot_time()
     uptime_str = format_uptime(uptime_seconds)
-    print("DEBUG UPTIME:", uptime_seconds, uptime_str)
+    print(f"DEBUG UPTIME FOR EMBED: {uptime_seconds}, Formatted as: {uptime_str}")
 
     # Gather CPU and RAM usage using psutil
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -144,15 +136,29 @@ def create_health_embed():
         inline=False,
     )
 
-    # System Overview
+    # Extract days part to highlight it (if it exists)
+    days_part = ""
+    hours_part = uptime_str
+    if "d " in uptime_str:
+        parts = uptime_str.split("d ", 1)
+        days_part = parts[0] + "d "
+        hours_part = parts[1]
+
+    # System Overview with highlighted days (if present)
     system_stats = (
         f"```ansi\n"
         f"\u001b[1;36mSYSTEM OVERVIEW\u001b[0m\n"
         f"┌──────────────────────────┐\n"
-        f"│ Uptime: \u001b[1;33m{uptime_str}\u001b[0m\n"
-        f"└──────────────────────────┘\n"
-        f"```"
     )
+
+    if days_part:
+        system_stats += (
+            f"│ Uptime: \u001b[1;31m{days_part}\u001b[1;33m{hours_part}\u001b[0m\n"
+        )
+    else:
+        system_stats += f"│ Uptime: \u001b[1;33m{uptime_str}\u001b[0m\n"
+
+    system_stats += f"└──────────────────────────┘\n" f"```"
     embed.add_field(name="", value=system_stats, inline=False)
 
     # Resource Usage
@@ -401,8 +407,11 @@ async def update_dashboard():
     global dashboard_message
     if dashboard_message:
         try:
+            print("Refreshing dashboard...")
             new_embed = create_health_embed()
+            print(f"Dashboard refresh with new embed created")
             await dashboard_message.edit(embed=new_embed)
+            print(f"Dashboard updated successfully")
         except Exception as e:
             print(f"Error updating dashboard: {e}")
             # If we lost the message reference, try to restore it
