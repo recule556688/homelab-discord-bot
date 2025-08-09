@@ -1646,60 +1646,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-@tree.command(
-    name="list_overseerr_links",
-    description="List all Discord to Overseerr account links (Admin only)",
-    guild=discord.Object(id=TEST_GUILD_ID),
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def list_overseerr_links(interaction: discord.Interaction):
-    """List all Discord to Overseerr account links"""
-    await interaction.response.defer(ephemeral=True)
-
-    try:
-        # Load existing mappings
-        mappings = {}
-        if os.path.exists(USER_MAPPING_FILE):
-            with open(USER_MAPPING_FILE, "r") as f:
-                mappings = json.load(f)
-
-        if not mappings:
-            await interaction.followup.send(
-                "No Discord to Overseerr account links found.", ephemeral=True
-            )
-            return
-
-        # Create an embed to display the links
-        embed = discord.Embed(
-            title="Discord to Overseerr Account Links",
-            description="Below are all the current account links:",
-            color=0x00B8FF,
-        )
-
-        for overseerr_user, discord_id in mappings.items():
-            try:
-                guild = interaction.guild
-                member = await guild.fetch_member(int(discord_id))
-                member_name = (
-                    member.display_name if member else f"Unknown User ({discord_id})"
-                )
-                embed.add_field(
-                    name=f"Overseerr: {overseerr_user}",
-                    value=f"Discord: {member_name} ({discord_id})",
-                    inline=False,
-                )
-            except Exception as e:
-                embed.add_field(
-                    name=f"Overseerr: {overseerr_user}",
-                    value=f"Discord: Unknown User ({discord_id}) - Error: {str(e)}",
-                    inline=False,
-                )
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
-
-
 class AccessRequestView(View):
     def __init__(self, user_id: int, channel_id: int):
         super().__init__(timeout=None)
