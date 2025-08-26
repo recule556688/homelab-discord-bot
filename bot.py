@@ -2232,7 +2232,7 @@ def create_invite_embed():
         value=(
             "**Step 1: Get Your Plex Invite**\n"
             "• Click the invite link below\n"
-            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/i/QOZEPF)**\n\n"
+            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/j/QOZEPF)**\n\n"
             "• Sign up with your email\n"
             "• Accept the Plex invitation\n\n"
             "**Step 2: Access Content**\n"
