@@ -2188,7 +2188,9 @@ async def handle_access_request(interaction: discord.Interaction):
             title=f"🎟 Access Request #{request_counter} | Demande d'Accès #{request_counter}",
             description=f"🇺🇸 User: {user.mention}\n🇫🇷 Utilisateur: {user.mention}\n\n"
             + f"🇺🇸 Please explain why you want access to the media server:\n"
-            + f"🇫🇷 Veuillez expliquer pourquoi vous souhaitez accéder au serveur multimédia:",
+            + f"🇫🇷 Veuillez expliquer pourquoi vous souhaitez accéder au serveur multimédia:"
+            + f"\n\n🇺🇸 Also specify here if you want access to the game server requesting:\n\n"
+            + f"🇫🇷 Veuillez également préciser ici si vous souhaitez accéder au service de création de serveur de jeu:\n",
             color=0x00B8FF,
         )
 
@@ -2232,11 +2234,12 @@ def create_invite_embed():
         value=(
             "**Step 1: Get Your Plex Invite**\n"
             "• Click the invite link below\n"
-            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/j/QOZEPF)**\n\n"
+            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/j/MF56XBJCBO)**\n\n"
             "• Sign up with your email\n"
             "• Accept the Plex invitation\n\n"
             "**Step 2: Access Content**\n"
-            "• Download [Plex](https://www.plex.tv/downloads) on your PC, Mac, or mobile device\n"
+            "• Download [Plex application](https://www.plex.tv/downloads) application on your PC, Mac, or mobile device\n"
+            "• Or use the web app at [Plex Web App](https://plex.tessdev.fr)\n"
             "• Sign in with your account\n"
             "• Start streaming!\n\n"
             "**Step 3: Request Content**\n"
@@ -2253,11 +2256,12 @@ def create_invite_embed():
         value=(
             "**Étape 1: Obtenir Votre Invitation Plex**\n"
             "• Cliquez sur le lien d'invitation ci-dessous\n"
-            "**🔗 [Cliquez Ici pour Joindre](https://wizarr.tessdev.fr/i/QOZEPF)**\n\n"
+            "**🔗 [Cliquez Ici pour Joindre](https://wizarr.tessdev.fr/j/MF56XBJCBO)**\n\n"
             "• Inscrivez-vous avec votre email\n"
             "• Acceptez l'invitation Plex\n\n"
             "**Étape 2: Accéder au Contenu**\n"
-            "• Téléchargez [Plex](https://www.plex.tv/downloads) sur votre PC, Mac, ou appareil mobile\n"
+            "• Téléchargez [L'application Plex](https://www.plex.tv/downloads) sur votre PC, Mac, ou appareil mobile\n"
+            "• Ou utilisez l'application web à [Plex Web App](https://plex.tessdev.fr)\n"
             "• Connectez-vous avec votre compte\n"
             "• Commencez à streamer!\n\n"
             "**Étape 3: Demander du Contenu**\n"
