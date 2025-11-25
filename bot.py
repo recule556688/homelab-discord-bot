@@ -2234,7 +2234,7 @@ def create_invite_embed():
         value=(
             "**Step 1: Get Your Plex Invite**\n"
             "• Click the invite link below\n"
-            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/j/MF56XBJCBO)**\n\n"
+            "**🔗 [Click Here to Join](https://wizarr.tessdev.fr/j/QOZEPF)**\n\n"
             "• Sign up with your email\n"
             "• Accept the Plex invitation\n\n"
             "**Step 2: Access Content**\n"
@@ -2256,7 +2256,7 @@ def create_invite_embed():
         value=(
             "**Étape 1: Obtenir Votre Invitation Plex**\n"
             "• Cliquez sur le lien d'invitation ci-dessous\n"
-            "**🔗 [Cliquez Ici pour Joindre](https://wizarr.tessdev.fr/j/MF56XBJCBO)**\n\n"
+            "**🔗 [Cliquez Ici pour Joindre](https://wizarr.tessdev.fr/j/QOZEPF**\n\n"
             "• Inscrivez-vous avec votre email\n"
             "• Acceptez l'invitation Plex\n\n"
             "**Étape 2: Accéder au Contenu**\n"
