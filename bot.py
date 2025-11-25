@@ -2276,7 +2276,7 @@ def create_invite_embed():
     embed.add_field(
         name="ℹ️ Important Notes | Notes Importantes\n",
         value=(
-            "**🇺🇸**\n"
+            "\n**🇺🇸**\n"
             "• This invite link is for approved members only\n"
             "• Keep your login information secure\n"
             "• Don't share your account with others\n"
