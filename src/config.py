@@ -34,6 +34,7 @@ DASHBOARD_STATE_FILE = os.path.join(_BASE_DIR, "data", "dashboard_state.json")
 COUNTER_STATE_FILE = os.path.join(_BASE_DIR, "data", "counter_state.json")
 USER_MAPPING_FILE = os.path.join(_BASE_DIR, "data", "overseerr_users.json")
 MEDIA_VOTES_FILE = os.path.join(_BASE_DIR, "data", "media_votes.json")
+AUTO_VOTE_LAST_RUN_FILE = os.path.join(_BASE_DIR, "data", "auto_vote_last_run.json")
 
 # Admin commands (for permission checks)
 ADMIN_COMMANDS = [

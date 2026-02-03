@@ -14,6 +14,7 @@ from plexapi.server import PlexServer
 
 from ..bot import tree
 from ..config import (
+    AUTO_VOTE_LAST_RUN_FILE,
     AUTO_VOTE_UNWATCHED_DAYS,
     MEDIA_VOTES_DRY_RUN,
     MEDIA_VOTES_FILE,
@@ -451,9 +452,40 @@ async def resolve_expired_votes():
 # --- Automated vote task ---
 
 
+AUTO_VOTE_COOLDOWN_HOURS = 20
+
+
+def _get_auto_vote_last_run() -> Optional[datetime]:
+    """Get last auto vote run timestamp (naive UTC)."""
+    if not os.path.exists(AUTO_VOTE_LAST_RUN_FILE):
+        return None
+    try:
+        with open(AUTO_VOTE_LAST_RUN_FILE, "r") as f:
+            data = json.load(f)
+        s = data.get("last_run")
+        if not s:
+            return None
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except (json.JSONDecodeError, IOError, ValueError):
+        return None
+
+
+def _set_auto_vote_last_run():
+    """Save current time as last auto vote run."""
+    _ensure_data_dir()
+    with open(AUTO_VOTE_LAST_RUN_FILE, "w") as f:
+        json.dump({"last_run": datetime.utcnow().isoformat()}, f)
+
+
 @tasks.loop(hours=24)
 async def auto_create_votes():
     """Find unwatched media and create vote embeds."""
+    last_run = _get_auto_vote_last_run()
+    if last_run:
+        elapsed = (datetime.utcnow() - last_run).total_seconds() / 3600
+        if elapsed < AUTO_VOTE_COOLDOWN_HOURS:
+            return
     from ..bot import bot
     channel = bot.get_channel(VOTE_CHANNEL_ID) if VOTE_CHANNEL_ID else None
     if not channel:
@@ -511,6 +543,8 @@ async def auto_create_votes():
     for info in batch:
         await _create_and_post_vote(bot, channel, info, data, mention_role=False)
         save_votes(data)
+    if batch:
+        _set_auto_vote_last_run()
 
 
 async def _create_and_post_vote(
