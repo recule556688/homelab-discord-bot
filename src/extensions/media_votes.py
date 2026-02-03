@@ -380,7 +380,33 @@ def _create_vote_view(vote_key: str) -> VoteView:
     return VoteView(vote_key)
 
 
-# --- Resolution task ---
+# --- Resolution logic ---
+
+
+async def _apply_vote_result(vote: dict, message: discord.Message) -> str:
+    """Apply vote result (kept or delete) and edit the message. Returns status string."""
+    keep_voters = vote.get("keep_voters", [])
+    if len(keep_voters) > 0:
+        embed = _build_vote_embed(vote, status="kept")
+        view = discord.ui.View()
+        view.stop()
+        await message.edit(embed=embed, view=view)
+        return "kept"
+    deleted = False
+    if MEDIA_VOTES_DRY_RUN:
+        status = "would have been deleted (dry run)"
+    else:
+        media_type = vote.get("media_type", "")
+        if media_type == "movie" and vote.get("radarr_id"):
+            deleted = await delete_radarr_movie(vote["radarr_id"])
+        elif media_type == "show" and vote.get("sonarr_id"):
+            deleted = await delete_sonarr_series(vote["sonarr_id"])
+        status = "deleted" if deleted else "skipped (not in Radarr/Sonarr)"
+    embed = _build_vote_embed(vote, status=status)
+    view = discord.ui.View()
+    view.stop()
+    await message.edit(embed=embed, view=view)
+    return status
 
 
 @tasks.loop(hours=1)
@@ -414,27 +440,7 @@ async def resolve_expired_votes():
         except discord.NotFound:
             to_remove.append(key)
             continue
-        keep_voters = vote.get("keep_voters", [])
-        if len(keep_voters) > 0:
-            embed = _build_vote_embed(vote, status="kept")
-            view = discord.ui.View()
-            view.stop()
-            await message.edit(embed=embed, view=view)
-        else:
-            deleted = False
-            if MEDIA_VOTES_DRY_RUN:
-                status = "would have been deleted (dry run)"
-            else:
-                media_type = vote.get("media_type", "")
-                if media_type == "movie" and vote.get("radarr_id"):
-                    deleted = await delete_radarr_movie(vote["radarr_id"])
-                elif media_type == "show" and vote.get("sonarr_id"):
-                    deleted = await delete_sonarr_series(vote["sonarr_id"])
-                status = "deleted" if deleted else "skipped (not in Radarr/Sonarr)"
-            embed = _build_vote_embed(vote, status=status)
-            view = discord.ui.View()
-            view.stop()
-            await message.edit(embed=embed, view=view)
+        await _apply_vote_result(vote, message)
         to_remove.append(key)
     for key in to_remove:
         votes.pop(key, None)
@@ -630,6 +636,40 @@ async def vote_delete(interaction: discord.Interaction, query: str):
         view=view,
         ephemeral=True,
     )
+
+
+@tree.command(
+    name="finish_vote",
+    description="Finish a vote now and apply the result (admin only)",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(message_id="The vote message ID (right-click message -> Copy ID)")
+async def finish_vote(interaction: discord.Interaction, message_id: str):
+    """Finish a vote immediately and apply the result (keep or delete)."""
+    await interaction.response.defer(ephemeral=True)
+    data = load_votes()
+    votes = data.get("votes", {})
+    found = None
+    for key, vote in votes.items():
+        if vote.get("message_id") == message_id:
+            found = key
+            break
+    if not found:
+        await interaction.followup.send("Vote not found or already resolved.", ephemeral=True)
+        return
+    vote = votes[found]
+    channel_id = int(vote.get("channel_id", 0))
+    try:
+        channel = await interaction.client.fetch_channel(channel_id)
+        message = await channel.fetch_message(int(message_id))
+    except discord.NotFound:
+        await interaction.followup.send("Vote message not found.", ephemeral=True)
+        return
+    status = await _apply_vote_result(vote, message)
+    del votes[found]
+    save_votes(data)
+    await interaction.followup.send(f"Vote finished. Result: **{status}**.", ephemeral=True)
 
 
 @tree.command(
