@@ -8,6 +8,7 @@ from . import overseerr
 from . import onboarding
 from . import permissions
 from . import server_setup
+from . import media_votes
 
 __all__ = [
     "dashboard",
@@ -17,4 +18,5 @@ __all__ = [
     "onboarding",
     "permissions",
     "server_setup",
+    "media_votes",
 ]

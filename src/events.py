@@ -11,6 +11,11 @@ from .config import DASHBOARD_STATE_FILE, NEWBIE_ROLE_ID, TEST_GUILD_ID
 from .extensions.dashboard import set_dashboard_state, update_dashboard
 from .extensions.overseerr import cache_overseerr_users, get_discord_id_for_overseerr_user
 from .extensions.onboarding import handle_access_request
+from .extensions.media_votes import (
+    auto_create_votes,
+    handle_vote_interaction,
+    resolve_expired_votes,
+)
 from .utils import load_dashboard_state
 
 
@@ -48,6 +53,12 @@ async def on_ready():
         # Start Overseerr user cache task
         if not cache_overseerr_users.is_running():
             cache_overseerr_users.start()
+
+        # Start media vote tasks
+        if not resolve_expired_votes.is_running():
+            resolve_expired_votes.start()
+        if not auto_create_votes.is_running():
+            auto_create_votes.start()
     except Exception as e:
         print(f"❌ Sync failed: {e}")
 
@@ -182,10 +193,13 @@ async def on_message(message):
 
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
-    """Handle component interactions - route request_access to handler."""
+    """Handle component interactions - route to handlers."""
     if interaction.type == discord.InteractionType.component:
-        if interaction.data["custom_id"] == "request_access":
+        if interaction.data.get("custom_id") == "request_access":
             await handle_access_request(interaction)
+            return
+        if await handle_vote_interaction(interaction):
+            return
 
 
 @tree.error

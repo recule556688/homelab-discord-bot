@@ -17,11 +17,23 @@ PLEX_TOKEN = os.getenv("PLEX_TOKEN")
 OVERSEERR_URL = os.getenv("OVERSEERR_URL", "https://overseer.tessdev.fr")
 OVERSEERR_API_KEY = os.getenv("OVERSEERR_API_KEY")
 
+# Radarr / Sonarr (for media deletion)
+RADARR_URL = os.getenv("RADARR_URL")
+RADARR_API_KEY = os.getenv("RADARR_API_KEY")
+SONARR_URL = os.getenv("SONARR_URL")
+SONARR_API_KEY = os.getenv("SONARR_API_KEY")
+VOTE_DURATION_DAYS = int(os.getenv("VOTE_DURATION_DAYS", "7"))
+AUTO_VOTE_UNWATCHED_DAYS = int(os.getenv("AUTO_VOTE_UNWATCHED_DAYS", "90"))
+VOTE_CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "0")) or None
+VOTE_MENTION_ROLE_ID = int(os.getenv("VOTE_MENTION_ROLE_ID", "0")) or None
+MEDIA_VOTES_DRY_RUN = os.getenv("MEDIA_VOTES_DRY_RUN", "").lower() in ("1", "true", "yes")
+
 # File paths - use project root (parent of src/) for data/
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DASHBOARD_STATE_FILE = os.path.join(_BASE_DIR, "data", "dashboard_state.json")
 COUNTER_STATE_FILE = os.path.join(_BASE_DIR, "data", "counter_state.json")
 USER_MAPPING_FILE = os.path.join(_BASE_DIR, "data", "overseerr_users.json")
+MEDIA_VOTES_FILE = os.path.join(_BASE_DIR, "data", "media_votes.json")
 
 # Admin commands (for permission checks)
 ADMIN_COMMANDS = [
@@ -32,6 +44,8 @@ ADMIN_COMMANDS = [
     "fix_access_channel",
     "send_intro_embed",
     "send_invite_embed",
+    "vote_delete",
+    "cancel_vote",
 ]
 
 # Role IDs

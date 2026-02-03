@@ -18,6 +18,8 @@ def main():
     if not config.TEST_GUILD_ID:
         print("❌ Error: TEST_GUILD_ID is not set")
         return
+    if config.MEDIA_VOTES_DRY_RUN:
+        print("⚠️  Media votes DRY RUN enabled - no files will be deleted")
     bot.run(config.TOKEN)
 
 

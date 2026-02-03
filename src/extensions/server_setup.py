@@ -65,6 +65,7 @@ async def setup_homelab(interaction: discord.Interaction):
             "🎶｜lidarr-status",
             "📤｜download-queue",
             "🧞｜overseerr-requests",
+            "🗑️｜media-votes",
         ],
         "🎮 Game Servers": [
             "🎮｜server-status",
