@@ -243,6 +243,16 @@ def _plex_item_to_info(item, library: str) -> Optional[dict]:
 # --- Vote embed and view ---
 
 
+def _format_voters(user_ids: list) -> str:
+    """Format voter list as Discord mentions. Truncate if too long."""
+    if not user_ids:
+        return "(none)"
+    mentions = ", ".join(f"<@{uid}>" for uid in user_ids)
+    if len(mentions) > 900:
+        return mentions[:897] + "..."
+    return mentions
+
+
 def _format_date(value: Optional[str]) -> str:
     """Format ISO date string for display (e.g. 2024-01-15 -> Jan 15, 2024)."""
     if not value:
@@ -282,12 +292,14 @@ def _build_vote_embed(
         color=0x5865F2,
         timestamp=datetime.fromisoformat(created_at) if created_at else datetime.now(),
     )
+    keep_str = f"{len(keep_voters)} — {_format_voters(keep_voters)}"
+    delete_str = f"{len(delete_voters)} — {_format_voters(delete_voters)}"
     embed.add_field(name="Library", value=library, inline=True)
     embed.add_field(name="Size", value=f"{size_gb} GB", inline=True)
     embed.add_field(name="Last watched", value=last_watched_str, inline=True)
     embed.add_field(name="Added", value=added_str, inline=True)
-    embed.add_field(name="Keep votes", value=str(len(keep_voters)), inline=True)
-    embed.add_field(name="Delete votes", value=str(len(delete_voters)), inline=True)
+    embed.add_field(name="Keep votes", value=keep_str, inline=False)
+    embed.add_field(name="Delete votes", value=delete_str, inline=False)
 
     if status:
         if status == "kept":
@@ -475,8 +487,23 @@ async def auto_create_votes():
                 break
         except Exception as e:
             print(f"Error in auto vote for {lib_name}: {e}")
-    for i, info in enumerate(candidates[:5]):
-        await _create_and_post_vote(bot, channel, info, data, mention_role=(i == 0))
+    batch = candidates[:5]
+    if batch:
+        intro = (
+            "**Media deletion vote** — Unwatched media is up for removal. "
+            "Click **Keep** to save it, **Delete** to remove it. "
+            "When the vote ends, media with no Keep votes is deleted from the library."
+        )
+        if VOTE_MENTION_ROLE_ID and channel.guild:
+            role = channel.guild.get_role(VOTE_MENTION_ROLE_ID)
+            if role:
+                await channel.send(f"{role.mention}\n\n{intro}")
+            else:
+                await channel.send(intro)
+        else:
+            await channel.send(intro)
+    for info in batch:
+        await _create_and_post_vote(bot, channel, info, data, mention_role=False)
         save_votes(data)
 
 
@@ -535,7 +562,7 @@ async def _create_and_post_vote(
     }
     embed = _build_vote_embed(vote_data)
     content = None
-    if VOTE_MENTION_ROLE_ID and channel.guild:
+    if mention_role and VOTE_MENTION_ROLE_ID and channel.guild:
         role = channel.guild.get_role(VOTE_MENTION_ROLE_ID)
         if role:
             content = role.mention
