@@ -452,7 +452,7 @@ async def resolve_expired_votes():
 # --- Automated vote task ---
 
 
-AUTO_VOTE_COOLDOWN_HOURS = 20
+AUTO_VOTE_COOLDOWN_HOURS = 6 * 24  # 6 days
 
 
 def _get_auto_vote_last_run() -> Optional[datetime]:
