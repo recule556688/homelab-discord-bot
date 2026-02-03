@@ -528,9 +528,11 @@ async def auto_create_votes():
     batch = candidates[:5]
     if batch:
         intro = (
-            "**Media deletion vote** — Unwatched media is up for removal. "
-            "Click **Keep** to save it, **Delete** to remove it. "
-            "When the vote ends, media with no Keep votes is deleted from the library."
+            "**Media deletion vote** / **Vote de suppression de médias**\n\n"
+            "🇺🇸 Unwatched media is up for removal. Click **Keep** to save it, **Delete** to remove it. "
+            "When the vote ends, media with no Keep votes is deleted from the library.\n\n"
+            "🇫🇷 Des médias non regardés sont proposés à la suppression. Cliquez sur **Keep** pour les garder, "
+            "**Delete** pour les supprimer. À la fin du vote, les médias sans vote Keep sont supprimés de la bibliothèque."
         )
         if VOTE_MENTION_ROLE_ID and channel.guild:
             role = channel.guild.get_role(VOTE_MENTION_ROLE_ID)
