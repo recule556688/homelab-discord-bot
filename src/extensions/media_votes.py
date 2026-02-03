@@ -475,8 +475,8 @@ async def auto_create_votes():
                 break
         except Exception as e:
             print(f"Error in auto vote for {lib_name}: {e}")
-    for info in candidates[:5]:
-        await _create_and_post_vote(bot, channel, info, data)
+    for i, info in enumerate(candidates[:5]):
+        await _create_and_post_vote(bot, channel, info, data, mention_role=(i == 0))
         save_votes(data)
 
 
@@ -485,6 +485,7 @@ async def _create_and_post_vote(
     channel: discord.TextChannel,
     info: dict,
     data: dict,
+    mention_role: bool = True,
 ) -> bool:
     """Create vote record and post embed. Returns True on success."""
     media_type = info.get("media_type", "")
