@@ -18,6 +18,7 @@ from ..config import (
     AUTO_VOTE_UNWATCHED_DAYS,
     MEDIA_VOTES_DRY_RUN,
     MEDIA_VOTES_FILE,
+    MEDIA_VOTES_PROPOSED_FILE,
     VOTE_MENTION_ROLE_ID,
     PLEX_TOKEN,
     PLEX_URL,
@@ -150,6 +151,26 @@ def save_votes(data: dict):
     _ensure_data_dir()
     with open(MEDIA_VOTES_FILE, "w") as f:
         json.dump(data, f, indent=2)
+
+
+def load_proposed_rating_keys() -> set:
+    """Load set of Plex rating keys that have already been proposed for a vote (any round)."""
+    if not os.path.exists(MEDIA_VOTES_PROPOSED_FILE):
+        return set()
+    try:
+        with open(MEDIA_VOTES_PROPOSED_FILE, "r") as f:
+            data = json.load(f)
+        keys = data.get("proposed_rating_keys", [])
+        return set(str(k) for k in keys)
+    except (json.JSONDecodeError, IOError):
+        return set()
+
+
+def save_proposed_rating_keys(keys: set):
+    """Save set of proposed Plex rating keys."""
+    _ensure_data_dir()
+    with open(MEDIA_VOTES_PROPOSED_FILE, "w") as f:
+        json.dump({"proposed_rating_keys": list(keys)}, f, indent=2)
 
 
 # --- Plex helpers ---
@@ -491,6 +512,8 @@ async def _run_media_vote_round(bot: discord.Client) -> int:
     active_rating_keys = set()
     for v in votes.values():
         active_rating_keys.add(v.get("plex_rating_key", ""))
+    proposed_rating_keys = load_proposed_rating_keys()
+    excluded_keys = active_rating_keys | proposed_rating_keys
     cutoff = datetime.utcnow() - timedelta(days=AUTO_VOTE_UNWATCHED_DAYS)
     added_cutoff = datetime.utcnow() - timedelta(days=30)
     library_names = ["Movies", "TV Shows", "Anime Shows", "Anime Movies"]
@@ -500,7 +523,7 @@ async def _run_media_vote_round(bot: discord.Client) -> int:
             lib = plex.library.section(lib_name)
             items = lib.all()
             for item in items:
-                if str(item.ratingKey) in active_rating_keys:
+                if str(item.ratingKey) in excluded_keys:
                     continue
                 last_viewed = getattr(item, "lastViewedAt", None)
                 if last_viewed and last_viewed.replace(tzinfo=None) > cutoff:
@@ -537,6 +560,11 @@ async def _run_media_vote_round(bot: discord.Client) -> int:
     for info in batch:
         await _create_and_post_vote(bot, channel, info, data, mention_role=False)
         save_votes(data)
+    if batch:
+        proposed_rating_keys = load_proposed_rating_keys()
+        for info in batch:
+            proposed_rating_keys.add(info.get("plex_rating_key", ""))
+        save_proposed_rating_keys(proposed_rating_keys)
     return len(batch)
 
 
@@ -660,6 +688,9 @@ async def vote_delete(interaction: discord.Interaction, query: str):
         data = load_votes()
         await _create_and_post_vote(interaction.client, channel, info, data)
         save_votes(data)
+        proposed = load_proposed_rating_keys()
+        proposed.add(info.get("plex_rating_key", ""))
+        save_proposed_rating_keys(proposed)
         await sel_interaction.response.edit_message(
             content=f"Vote created for **{info['title']}** in {channel.mention}",
             view=None,
