@@ -478,22 +478,14 @@ def _set_auto_vote_last_run():
         json.dump({"last_run": datetime.utcnow().isoformat()}, f)
 
 
-@tasks.loop(hours=24)
-async def auto_create_votes():
-    """Find unwatched media and create vote embeds."""
-    last_run = _get_auto_vote_last_run()
-    if last_run:
-        elapsed = (datetime.utcnow() - last_run).total_seconds() / 3600
-        if elapsed < AUTO_VOTE_COOLDOWN_HOURS:
-            return
-    from ..bot import bot
+async def _run_media_vote_round(bot: discord.Client) -> int:
+    """Run one round of media votes (find candidates, send intro, create up to 5 votes). Returns count created."""
     channel = bot.get_channel(VOTE_CHANNEL_ID) if VOTE_CHANNEL_ID else None
     if not channel:
-        print("Warning: VOTE_CHANNEL_ID not set or channel not found, skipping auto votes")
-        return
+        return 0
     plex = get_plex_connection()
     if not plex:
-        return
+        return 0
     data = load_votes()
     votes = data.get("votes", {})
     active_rating_keys = set()
@@ -545,7 +537,20 @@ async def auto_create_votes():
     for info in batch:
         await _create_and_post_vote(bot, channel, info, data, mention_role=False)
         save_votes(data)
-    if batch:
+    return len(batch)
+
+
+@tasks.loop(hours=24)
+async def auto_create_votes():
+    """Find unwatched media and create vote embeds (respects cooldown)."""
+    last_run = _get_auto_vote_last_run()
+    if last_run:
+        elapsed = (datetime.utcnow() - last_run).total_seconds() / 3600
+        if elapsed < AUTO_VOTE_COOLDOWN_HOURS:
+            return
+    from ..bot import bot
+    count = await _run_media_vote_round(bot)
+    if count > 0:
         _set_auto_vote_last_run()
 
 
@@ -709,8 +714,48 @@ async def finish_vote(interaction: discord.Interaction, message_id: str):
 
 
 @tree.command(
+    name="start_media_vote",
+    description="Start a round of media votes now (admin only)",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    delay_next_auto="If True (default), next automatic vote round is delayed by 6 days to avoid overlap. If False, the scheduled auto round may still run."
+)
+async def start_media_vote(
+    interaction: discord.Interaction,
+    delay_next_auto: bool = True,
+):
+    """Manually trigger one round of media votes (same as automatic round)."""
+    await interaction.response.defer(ephemeral=True)
+    if not VOTE_CHANNEL_ID:
+        await interaction.followup.send(
+            "VOTE_CHANNEL_ID is not set in .env.",
+            ephemeral=True,
+        )
+        return
+    count = await _run_media_vote_round(interaction.client)
+    if count > 0:
+        if delay_next_auto:
+            _set_auto_vote_last_run()
+        msg = (
+            f"Started a round of media votes: **{count}** vote(s) created in the vote channel."
+        )
+        if delay_next_auto:
+            msg += " Next automatic round delayed by 6 days."
+        else:
+            msg += " Next automatic round unchanged (may overlap)."
+        await interaction.followup.send(msg, ephemeral=True)
+    else:
+        await interaction.followup.send(
+            "No new votes created. Either no unwatched candidates or vote channel not found.",
+            ephemeral=True,
+        )
+
+
+@tree.command(
     name="cancel_vote",
-    description="Cancel an active vote (admin only)",
+    description="Cancel one active vote by message ID (admin only)",
     guild=discord.Object(id=TEST_GUILD_ID),
 )
 @app_commands.checks.has_permissions(administrator=True)
@@ -739,6 +784,42 @@ async def cancel_vote(interaction: discord.Interaction, message_id: str):
     del votes[found]
     save_votes(data)
     await interaction.followup.send("Vote cancelled.", ephemeral=True)
+
+
+@tree.command(
+    name="cancel_all_votes",
+    description="Cancel all active media votes (admin only)",
+    guild=discord.Object(id=TEST_GUILD_ID),
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def cancel_all_votes(interaction: discord.Interaction):
+    """Cancel every active vote and clear state."""
+    await interaction.response.defer(ephemeral=True)
+    data = load_votes()
+    votes = data.get("votes", {})
+    if not votes:
+        await interaction.followup.send("No active votes to cancel.", ephemeral=True)
+        return
+    cancelled = 0
+    for key, vote in list(votes.items()):
+        channel_id = int(vote.get("channel_id", 0))
+        message_id = vote.get("message_id")
+        if not channel_id or not message_id:
+            votes.pop(key, None)
+            cancelled += 1
+            continue
+        try:
+            channel = await interaction.client.fetch_channel(channel_id)
+            message = await channel.fetch_message(int(message_id))
+            embed = _build_vote_embed(vote, status="cancelled")
+            await message.edit(embed=embed, view=discord.ui.View())
+        except discord.NotFound:
+            pass
+        votes.pop(key, None)
+        cancelled += 1
+    data["votes"] = votes
+    save_votes(data)
+    await interaction.followup.send(f"Cancelled **{cancelled}** vote(s).", ephemeral=True)
 
 
 # --- Interaction routing (called from events.py) ---

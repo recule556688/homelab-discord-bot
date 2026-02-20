@@ -47,7 +47,9 @@ ADMIN_COMMANDS = [
     "send_invite_embed",
     "vote_delete",
     "cancel_vote",
+    "cancel_all_votes",
     "finish_vote",
+    "start_media_vote",
 ]
 
 # Role IDs
