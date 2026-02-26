@@ -309,10 +309,30 @@ def _build_vote_embed(
     last_watched_str = "Never" if not last_viewed else _format_date(last_viewed)
     added_str = _format_date(added_at) if added_at else "Unknown"
 
+    created_dt: Optional[datetime] = None
+    if created_at:
+        try:
+            created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except Exception:
+            created_dt = None
+
+    ends_dt: Optional[datetime] = None
+    end_ts: Optional[int] = None
+    if ends_at:
+        try:
+            ends_dt = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+            if ends_dt.tzinfo is None:
+                ends_dt = ends_dt.replace(tzinfo=timezone.utc)
+            end_ts = int(ends_dt.timestamp())
+        except Exception:
+            ends_dt = None
+            end_ts = None
+
     embed = discord.Embed(
         title=f"Vote: Delete {title}?",
         color=0x5865F2,
-        timestamp=datetime.fromisoformat(created_at) if created_at else datetime.now(),
+        # Show end time as the embed timestamp (less confusing than created_at)
+        timestamp=ends_dt or created_dt or datetime.now(timezone.utc),
     )
     keep_str = f"{len(keep_voters)} — {_format_voters(keep_voters)}"
     delete_str = f"{len(delete_voters)} — {_format_voters(delete_voters)}"
@@ -320,6 +340,13 @@ def _build_vote_embed(
     embed.add_field(name="Size", value=f"{size_gb} GB", inline=True)
     embed.add_field(name="Last watched", value=last_watched_str, inline=True)
     embed.add_field(name="Added", value=added_str, inline=True)
+    if end_ts is not None:
+        # Discord renders <t:...> in fields/descriptions (but not in embed footer).
+        embed.add_field(
+            name="Ends",
+            value=f"<t:{end_ts}:F> (<t:{end_ts}:R>)",
+            inline=False,
+        )
     embed.add_field(name="Keep votes", value=keep_str, inline=False)
     embed.add_field(name="Delete votes", value=delete_str, inline=False)
 
@@ -341,15 +368,6 @@ def _build_vote_embed(
             value="Not managed by Radarr/Sonarr - cannot delete",
             inline=False,
         )
-    if ends_at and not status:
-        try:
-            end_dt = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
-            if end_dt.tzinfo is None:
-                end_dt = end_dt.replace(tzinfo=timezone.utc)
-            end_ts = int(end_dt.timestamp())
-            embed.set_footer(text=f"Ends: <t:{end_ts}:F> (<t:{end_ts}:R>)")
-        except Exception:
-            embed.set_footer(text=f"Ends: {ends_at[:10]}")
 
     return embed
 
