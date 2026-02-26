@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import aiohttp
@@ -343,9 +343,11 @@ def _build_vote_embed(
         )
     if ends_at and not status:
         try:
-            end_dt = datetime.fromisoformat(ends_at)
-            days_left = (end_dt - datetime.now(end_dt.tzinfo) if end_dt.tzinfo else end_dt - datetime.now()).days
-            embed.set_footer(text=f"Vote ends in {days_left} days" if days_left > 0 else f"Ends: {ends_at[:10]}")
+            end_dt = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            end_ts = int(end_dt.timestamp())
+            embed.set_footer(text=f"Ends: <t:{end_ts}:F> (<t:{end_ts}:R>)")
         except Exception:
             embed.set_footer(text=f"Ends: {ends_at[:10]}")
 
