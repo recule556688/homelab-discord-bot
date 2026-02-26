@@ -503,11 +503,23 @@ def _set_auto_vote_last_run():
 
 async def _run_media_vote_round(bot: discord.Client) -> int:
     """Run one round of media votes (find candidates, send intro, create up to 5 votes). Returns count created."""
-    channel = bot.get_channel(VOTE_CHANNEL_ID) if VOTE_CHANNEL_ID else None
-    if not channel:
+    if not VOTE_CHANNEL_ID:
+        print("Media votes: VOTE_CHANNEL_ID not set; skipping round")
+        return 0
+    try:
+        channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
+    except discord.NotFound:
+        print(f"Media votes: vote channel not found for id={VOTE_CHANNEL_ID}; skipping round")
+        return 0
+    except discord.Forbidden:
+        print(f"Media votes: forbidden to fetch channel id={VOTE_CHANNEL_ID}; skipping round")
+        return 0
+    except Exception as e:
+        print(f"Media votes: failed to fetch channel id={VOTE_CHANNEL_ID}: {e}")
         return 0
     plex = get_plex_connection()
     if not plex:
+        print("Media votes: Plex unavailable; skipping round")
         return 0
     data = load_votes()
     votes = data.get("votes", {})
@@ -543,6 +555,8 @@ async def _run_media_vote_round(bot: discord.Client) -> int:
         except Exception as e:
             print(f"Error in auto vote for {lib_name}: {e}")
     batch = candidates[:5]
+    if not batch:
+        print("Media votes: no new candidates found for this round")
     if batch:
         intro = (
             "**Media deletion vote** / **Vote de suppression de médias**\n\n"
@@ -577,11 +591,15 @@ async def auto_create_votes():
     if last_run:
         elapsed = (datetime.utcnow() - last_run).total_seconds() / 3600
         if elapsed < AUTO_VOTE_COOLDOWN_HOURS:
+            print(
+                f"Media votes: auto round skipped (cooldown {AUTO_VOTE_COOLDOWN_HOURS:.0f}h, elapsed {elapsed:.1f}h)"
+            )
             return
     from ..bot import bot
     count = await _run_media_vote_round(bot)
     if count > 0:
         _set_auto_vote_last_run()
+        print(f"Media votes: auto round created {count} vote(s)")
 
 
 async def _create_and_post_vote(
