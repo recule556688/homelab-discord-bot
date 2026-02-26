@@ -494,29 +494,62 @@ async def resolve_expired_votes():
 
 
 AUTO_VOTE_COOLDOWN_HOURS = 6 * 24  # 6 days
+# Short debounce so multiple on_ready / task starts don't run the round several times
+AUTO_VOTE_DEBOUNCE_MINUTES = 5
+
+
+def _read_auto_vote_state() -> dict:
+    """Read full state file (last_run, last_round_started)."""
+    if not os.path.exists(AUTO_VOTE_LAST_RUN_FILE):
+        return {}
+    try:
+        with open(AUTO_VOTE_LAST_RUN_FILE, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def _write_auto_vote_state(updates: dict):
+    """Merge updates into state file and write."""
+    _ensure_data_dir()
+    data = _read_auto_vote_state()
+    data.update(updates)
+    with open(AUTO_VOTE_LAST_RUN_FILE, "w") as f:
+        json.dump(data, f)
 
 
 def _get_auto_vote_last_run() -> Optional[datetime]:
     """Get last auto vote run timestamp (naive UTC)."""
-    if not os.path.exists(AUTO_VOTE_LAST_RUN_FILE):
+    s = _read_auto_vote_state().get("last_run")
+    if not s:
         return None
     try:
-        with open(AUTO_VOTE_LAST_RUN_FILE, "r") as f:
-            data = json.load(f)
-        s = data.get("last_run")
-        if not s:
-            return None
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         return dt.replace(tzinfo=None) if dt.tzinfo else dt
-    except (json.JSONDecodeError, IOError, ValueError):
+    except (ValueError, TypeError):
+        return None
+
+
+def _get_last_round_started() -> Optional[datetime]:
+    """Get last time a round was started (for debounce)."""
+    s = _read_auto_vote_state().get("last_round_started")
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except (ValueError, TypeError):
         return None
 
 
 def _set_auto_vote_last_run():
     """Save current time as last auto vote run."""
-    _ensure_data_dir()
-    with open(AUTO_VOTE_LAST_RUN_FILE, "w") as f:
-        json.dump({"last_run": datetime.utcnow().isoformat()}, f)
+    _write_auto_vote_state({"last_run": datetime.utcnow().isoformat()})
+
+
+def _set_last_round_started():
+    """Mark that a round is starting (for debounce)."""
+    _write_auto_vote_state({"last_round_started": datetime.utcnow().isoformat()})
 
 
 async def _run_media_vote_round(bot: discord.Client) -> int:
@@ -602,17 +635,25 @@ async def _run_media_vote_round(bot: discord.Client) -> int:
     return len(batch)
 
 
-@tasks.loop(hours=24)
+@tasks.loop(hours=1)
 async def auto_create_votes():
-    """Find unwatched media and create vote embeds (respects cooldown)."""
+    """Find unwatched media and create vote embeds (respects cooldown).
+
+    Runs hourly so transient Plex downtime doesn't cause you to miss the
+    weekly round; only creates a round once per cooldown window.
+    Debounces so multiple on_ready / restarts don't send duplicate intros.
+    """
     last_run = _get_auto_vote_last_run()
     if last_run:
-        elapsed = (datetime.utcnow() - last_run).total_seconds() / 3600
-        if elapsed < AUTO_VOTE_COOLDOWN_HOURS:
-            print(
-                f"Media votes: auto round skipped (cooldown {AUTO_VOTE_COOLDOWN_HOURS:.0f}h, elapsed {elapsed:.1f}h)"
-            )
+        elapsed_h = (datetime.utcnow() - last_run).total_seconds() / 3600
+        if elapsed_h < AUTO_VOTE_COOLDOWN_HOURS:
             return
+    last_started = _get_last_round_started()
+    if last_started:
+        elapsed_min = (datetime.utcnow() - last_started).total_seconds() / 60
+        if elapsed_min < AUTO_VOTE_DEBOUNCE_MINUTES:
+            return
+    _set_last_round_started()
     from ..bot import bot
     count = await _run_media_vote_round(bot)
     if count > 0:
