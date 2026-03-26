@@ -424,11 +424,21 @@ def _create_vote_view(vote_key: str) -> VoteView:
 
 # --- Resolution logic ---
 
+VOTE_DELETE_QUORUM = 3
+
+
+def _should_delete_vote(*, keep_count: int, delete_count: int) -> bool:
+    total = keep_count + delete_count
+    return total >= VOTE_DELETE_QUORUM and delete_count > keep_count
+
 
 async def _apply_vote_result(vote: dict, message: discord.Message) -> str:
     """Apply vote result (kept or delete) and edit the message. Returns status string."""
     keep_voters = vote.get("keep_voters", [])
-    if len(keep_voters) > 0:
+    delete_voters = vote.get("delete_voters", [])
+    keep_count = len(keep_voters)
+    delete_count = len(delete_voters)
+    if not _should_delete_vote(keep_count=keep_count, delete_count=delete_count):
         embed = _build_vote_embed(vote, status="kept")
         view = discord.ui.View()
         view.stop()
@@ -493,7 +503,7 @@ async def resolve_expired_votes():
 # --- Automated vote task ---
 
 
-AUTO_VOTE_COOLDOWN_HOURS = 6 * 24  # 6 days
+AUTO_VOTE_COOLDOWN_HOURS = 30 * 24  # 30 days
 # Short debounce so multiple on_ready / task starts don't run the round several times
 AUTO_VOTE_DEBOUNCE_MINUTES = 5
 
@@ -830,7 +840,7 @@ async def finish_vote(interaction: discord.Interaction, message_id: str):
 )
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    delay_next_auto="If True (default), next automatic vote round is delayed by 6 days to avoid overlap. If False, the scheduled auto round may still run."
+    delay_next_auto="If True (default), next automatic vote round is delayed by 30 days to avoid overlap. If False, the scheduled auto round may still run."
 )
 async def start_media_vote(
     interaction: discord.Interaction,
@@ -852,7 +862,7 @@ async def start_media_vote(
             f"Started a round of media votes: **{count}** vote(s) created in the vote channel."
         )
         if delay_next_auto:
-            msg += " Next automatic round delayed by 6 days."
+            msg += " Next automatic round delayed by 30 days."
         else:
             msg += " Next automatic round unchanged (may overlap)."
         await interaction.followup.send(msg, ephemeral=True)
