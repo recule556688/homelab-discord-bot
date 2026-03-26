@@ -432,6 +432,33 @@ def _should_delete_vote(*, keep_count: int, delete_count: int) -> bool:
     return total >= VOTE_DELETE_QUORUM and delete_count > keep_count
 
 
+def _build_vote_recap(vote: dict, status: str) -> str:
+    """Build a short recap message posted when a vote is resolved."""
+    title = vote.get("title", "Unknown")
+    keep_voters = vote.get("keep_voters", [])
+    delete_voters = vote.get("delete_voters", [])
+    keep_count = len(keep_voters)
+    delete_count = len(delete_voters)
+    total_votes = keep_count + delete_count
+
+    if status == "deleted":
+        outcome = "Deleted"
+    elif "dry run" in status.lower():
+        outcome = "Would be deleted (dry run)"
+    elif status == "kept":
+        outcome = "Kept"
+    else:
+        outcome = status.capitalize()
+
+    return (
+        f"📊 **Vote recap** for **{title}**\n"
+        f"• Outcome: **{outcome}**\n"
+        f"• Keep: **{keep_count}** ({_format_voters(keep_voters)})\n"
+        f"• Delete: **{delete_count}** ({_format_voters(delete_voters)})\n"
+        f"• Total votes: **{total_votes}**"
+    )
+
+
 async def _apply_vote_result(vote: dict, message: discord.Message) -> str:
     """Apply vote result (kept or delete) and edit the message. Returns status string."""
     keep_voters = vote.get("keep_voters", [])
@@ -443,6 +470,7 @@ async def _apply_vote_result(vote: dict, message: discord.Message) -> str:
         view = discord.ui.View()
         view.stop()
         await message.edit(embed=embed, view=view)
+        await message.channel.send(_build_vote_recap(vote, "kept"))
         return "kept"
     deleted = False
     if MEDIA_VOTES_DRY_RUN:
@@ -458,6 +486,7 @@ async def _apply_vote_result(vote: dict, message: discord.Message) -> str:
     view = discord.ui.View()
     view.stop()
     await message.edit(embed=embed, view=view)
+    await message.channel.send(_build_vote_recap(vote, status))
     return status
 
 
